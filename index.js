@@ -366,10 +366,11 @@ bot.once(Events.ClientReady, async () => {
     hourlyWorkerJob.start();
     if (shardId == 1) dailyCronJob.start();
 
-    if (shardId === 0) {
+    // UNCOMMENT WHEN BOT IS ADDED TO TOP.GG BALDO
+    /* if (shardId === 0) {
         setInterval(postStats, 30 * 60 * 1000);
         setTimeout(postStats, 15 * 1000);
-    }
+    } */
 
     updateShardMetrics();
     setInterval(updateShardMetrics, 30 * 1000);
