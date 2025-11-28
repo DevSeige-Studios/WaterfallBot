@@ -23,4 +23,6 @@ const userSchema = mongoose.Schema({
     banned: { type: Boolean, default: false }
 }, { versionKey: false });
 
+userSchema.index({ banned: 1 });
+
 module.exports = mongoose.model("users", userSchema);

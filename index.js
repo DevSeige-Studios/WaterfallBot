@@ -384,7 +384,6 @@ const events = requireAll({
     filter: /^(?!-)(.+)\.js$/,
 });
 
-bot.on("error", error => logger.error(error));
 bot.on("shardError", (error, shardId) => logger.error(`Shard ${shardId} error:`, error));
 process.on("unhandledRejection", reason => logger.error("Unhandled Rejection:", reason));
 process.on("uncaughtException", error => logger.error("Uncaught Exception:", error));

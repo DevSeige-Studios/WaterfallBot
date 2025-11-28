@@ -6,6 +6,8 @@ const serverSchema = mongoose.Schema({
     banned: { type: Boolean, default: false }
 }, { versionKey: false });
 
+serverSchema.index({ banned: 1 });
+
 module.exports = {
     Server: mongoose.model("servers", serverSchema)
 };

@@ -140,3 +140,7 @@ vite.config.ts.timestamp-*
 
 # macOS system files
 .DS_Store
+
+# Project-specific files
+package-lock.json
+settings.json
