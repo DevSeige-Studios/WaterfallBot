@@ -1,0 +1,31 @@
+{
+    "name": "waterfallbot",
+    "version": "1.0.0",
+    "description": "Waterfall Discord Bot",
+    "main": "bot.js",
+    "scripts": {
+        "start": "node bot.js",
+        "dev": "node bot.js",
+        "shard": "node shardManager.js",
+        "deploy": "node deploy-commands.js"
+    },
+    "author": "DevSiege Studios",
+    "license": "GPL-3.0",
+    "dependencies": {
+        "axios": "^1.7.9",
+        "chalk": "^4.1.2",
+        "cron": "^3.1.7",
+        "discord.js": "^14.17.3",
+        "dotenv": "^16.4.7",
+        "express": "^4.21.2",
+        "express-rate-limit": "^7.5.0",
+        "moment": "^2.30.1",
+        "mongoose": "^8.9.3",
+        "node-fetch": "^2.7.0",
+        "require-all": "^3.0.0"
+    },
+    "devDependencies": {},
+    "engines": {
+        "node": ">=22.0.0"
+    }
+}
