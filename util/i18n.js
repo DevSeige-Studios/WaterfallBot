@@ -63,7 +63,7 @@ function getCommandMetadata() {
                     }
                 }
             } catch (err) {
-                console.error(`[Localization] Error loading commands.json for ${lang}:`, err);
+                logger.error(`[Localization] Error loading commands.json for ${lang}:`, err);
             }
         }
     }
