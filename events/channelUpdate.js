@@ -254,7 +254,7 @@ async function flushUpdates(bot, guildId) {
     await modLog.logEvent(bot, guildId, 'channelHierarchyUpdate', {
         count: changes.length,
         mover: mover,
-        moderator: moderator,
+        moderator: null, //moderator,
         auditLogPermissionsMissing: auditLogPermissionsMissing
     }, `hierarchy:channels:${guildId}:${mover?.id || 'unknown'}`);
 }

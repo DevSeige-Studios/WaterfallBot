@@ -165,7 +165,7 @@ async function flushUpdates(bot, guildId) {
     await modLog.logEvent(bot, guildId, 'roleHierarchyUpdate', {
         count: changes.length,
         mover: mover,
-        moderator: moderator,
+        moderator: null, //moderator,
         auditLogPermissionsMissing: auditLogPermissionsMissing
     }, `hierarchy:roles:${guildId}:${mover?.id || 'unknown'}`);
 }
