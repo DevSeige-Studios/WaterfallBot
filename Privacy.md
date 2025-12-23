@@ -1,7 +1,5 @@
 # Privacy Policy of Waterfall Bot
 
-### **Privacy Policy for WaterfallBot**
-
 **Last Updated:** December 23, 2025
 
 This Privacy Policy outlines how DevSeige Studios ("we," "us," or "our") collects, uses, and protects the information of users ("you" or "your") of the WaterfallBot Discord bot (the "Bot").
