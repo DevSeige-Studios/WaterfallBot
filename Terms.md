@@ -26,16 +26,20 @@ To the fullest extent permitted by law, the team shall not be liable for any ind
 - Unauthorized access, use, or alteration of your transmissions or content.
 
 ## 5. Indemnification
-You agree to indemnify and hold harmless the Bot Owner from and against any and all claims, liabilities, damages, losses, and expenses, including without limitation, reasonable legal and accounting fees, arising out of or in any way connected with your access to or use of the Bot or your violation of these Terms
+You agree to indemnify and hold harmless the team from and against any and all claims, liabilities, damages, losses, and expenses, including without limitation, reasonable legal and accounting fees, arising out of or in any way connected with your access to or use of the Bot or your violation of these Terms
 
 ## 6. Intellectual Property
 The Bot and all intellectual property rights therein, including but not limited to the source code, branding, and features, are and shall remain the property of the Bot Owner. You agree not to copy, modify, or distribute the Bot or any portion thereof without the express written consent of the Bot Owner.
 
-## 7. Contact us
+## 7. Data Privacy
+We store in a database some data related to the usage of our bot by the end user and servers to provide the funcionalities plus for analystics and security purposes.
+This data is used solely for the functionality of the Bot and is not shared with any third parties. For more details, please review our full Privacy Policy
+
+## 8. Contact us
 If you have any questions about these Terms, please contact us at `devseige@gmail.com`.
 
-## 8. Termination of Accounts
+## 9. Termination of Accounts
 We may, in our sole discretion, suspend or terminate your access to the Bot at any time, for any reason, including but not limited to your breach of these Terms. Upon termination, you must immediately cease all use of the Bot.
 
-## 9. Changes to Terms of Service
+## 10. Changes to Terms of Service
 We reserve the right to modify these Terms at any time. We will do our best to notify you of any changes, but it is your responsibility to review these Terms periodically. Your continued use of the Bot after any modification to these Terms will constitute your acceptance of the new Terms.
