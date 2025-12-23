@@ -80,7 +80,7 @@ We respect your right to control your data. Under the GDPR, you have the followi
 *   **The Right to Restrict Processing:** You have the right to request that we restrict the processing of your personal data, under certain conditions.
 *   **The Right to Object to Processing:** You have the right to object to our processing of your personal data, under certain conditions.
 
-To exercise any of these rights, please contact us at **[Your Email Address]**.
+To exercise any of these rights, please contact us at devseige@gmail.com.
 
 **6. Data Security**
 
