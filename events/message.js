@@ -3,6 +3,7 @@ const fs = require("fs");
 const { settings } = require("../util/settingsModule.js");
 const funcs = require("../util/functions.js");
 const { Server } = require("../schemas/servers.js");
+const { ServerStats } = require("../schemas/serverStats.js");
 const users = require("../schemas/users.js");
 const { i18n } = require("../util/i18n.js");
 const analyticsWorker = require("../util/analyticsWorker.js");
@@ -10,6 +11,7 @@ const cooldowns = new Map();
 const alertCooldowns = new Map();
 const adminCommands = ["prefix", "p"];
 const serverCache = new Map();
+const statsEnabledCache = new Map();
 
 async function getServerData(guildId) {
     const cacheData = serverCache.get(guildId);
@@ -28,6 +30,18 @@ async function getServerData(guildId) {
 function updateServerCache(guildId, updatedData) {
     serverCache.set(guildId, { data: updatedData, timestamp: Date.now() });
 }
+
+async function isStatsEnabled(guildId) {
+    const cached = statsEnabledCache.get(guildId);
+    if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+        return cached.enabled;
+    }
+    const serverData = await Server.findOne({ serverID: guildId });
+    const enabled = serverData?.serverStats?.enabled || false;
+    const excludedChannels = serverData?.serverStats?.excludedChannels || [];
+    statsEnabledCache.set(guildId, { enabled, excludedChannels, timestamp: Date.now() });
+    return enabled;
+}
 //
 module.exports = {
     name: "messageCreate",
@@ -36,6 +50,21 @@ module.exports = {
 
         analyticsWorker.trackMessage();
 
+        if (message.guild) {
+            isStatsEnabled(message.guild.id).then(async (enabled) => {
+                if (enabled) {
+                    const cached = statsEnabledCache.get(message.guild.id);
+                    const excludedChannels = cached?.excludedChannels || [];
+                    if (!excludedChannels.includes(message.channel.id)) {
+                        try {
+                            await ServerStats.trackMessage(message.guild.id, message.channel.id, message.author.id);
+                        } catch (err) {
+                            //
+                        }
+                    }
+                }
+            });
+        }
         const locale = message.guild ? message.guild.preferredLocale : 'en';
         const t = i18n.getFixedT(locale);
 
@@ -49,6 +78,7 @@ module.exports = {
                 return;
             }
         }
+
         return;
         const serverData = await getServerData(message.guild.id);
         const prefix = serverData ? serverData.prefix : settings.prefix;
@@ -142,8 +172,3 @@ module.exports = {
         }
     }
 };
-
-// DISABLED
-/* function getSettings() {
-    return JSON.parse(fs.readFileSync('./util/settings.json', 'utf8'));
-} */

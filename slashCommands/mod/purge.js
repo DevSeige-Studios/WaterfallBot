@@ -176,14 +176,16 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addIntegerOption(opt =>
             opt.setName('amount')
+                .setNameLocalizations(commandMeta.purge.option_amount_name || {})
                 .setDescription('Number of messages to delete')
-                .setDescriptionLocalizations(commandMeta.purge.option_amount)
+                .setDescriptionLocalizations(commandMeta.purge.option_amount_description || {})
                 .setRequired(true)
         )
         .addUserOption(opt =>
             opt.setName('user')
+                .setNameLocalizations(commandMeta.purge.option_user_name || {})
                 .setDescription('Delete messages from specific user (optional)')
-                .setDescriptionLocalizations(commandMeta.purge.option_user)
+                .setDescriptionLocalizations(commandMeta.purge.option_user_description || {})
         ),
     integration_types: [0],
     contexts: [0],

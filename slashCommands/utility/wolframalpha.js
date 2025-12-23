@@ -11,6 +11,7 @@ if (process.env.WOLFRAM_APPID) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("wolframalpha")
+        .setNameLocalizations(commandMeta.wolfram.name)
         .setDescription("Query Wolfram|Alpha for computational answers")
         .setDescriptionLocalizations(commandMeta.wolfram.description)
         .addStringOption(opt => opt
@@ -255,7 +256,8 @@ async function handleWolframError(interaction, error, settings, t, originalQuery
     } else if (error.message.includes('did not understand') ||
         error.message.includes('No results') ||
         error.message.includes('Could not parse')) {
-        userMessage = `${t('commands:wolfram.error_no_results')}\n\n**${t('commands:wolfram.try_these_examples')}**\n• \`plot sin(x)\`\n• \`graph y=x^2\`\n• \`integrate x^2\`\n• \`population of france\`\n• \`solve x^2 + 2x + 1 = 0\`\n• \`weather in london\``;
+        const isConversionQuery = ["to", "in", "convert", "unit", "⇄"].some(k => originalQuery.toLowerCase().includes(k));
+        userMessage = `${t('commands:wolfram.error_no_results')}${isConversionQuery ? `\n\n${e.info} **${t('commands:wolfram.try_convert')}**` : ""}\n\n**${t('commands:wolfram.try_these_examples')}**\n• \`plot sin(x)\`\n• \`graph y=x^2\`\n• \`integrate x^2\`\n• \`population of france\`\n• \`solve x^2 + 2x + 1 = 0\`\n• \`weather in london\``;
     } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
         userMessage = t('commands:wolfram.error_timeout');
     }

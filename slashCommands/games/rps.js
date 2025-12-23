@@ -131,12 +131,14 @@ function buildMoveButtons(gameId, t) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('rps')
+        .setNameLocalizations(commandMeta.rps?.name || {})
         .setDescription('Play Rock Paper Scissors against Waterfall or another player')
         .setDescriptionLocalizations(commandMeta.rps?.description || {})
         .addUserOption(opt =>
             opt.setName('opponent')
+                .setNameLocalizations(commandMeta.rps?.option_opponent_name || {})
                 .setDescription('Challenge another player (optional)')
-                .setDescriptionLocalizations(commandMeta.rps?.option_opponent || {})
+                .setDescriptionLocalizations(commandMeta.rps?.option_opponent_description || {})
                 .setRequired(false)
         ),
     integration_types: [0, 1],

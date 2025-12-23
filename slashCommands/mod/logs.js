@@ -29,8 +29,9 @@ module.exports = {
                 .setDescriptionLocalizations(commandMeta.logs.enable_description)
                 .addStringOption(option =>
                     option.setName('type')
+                        .setNameLocalizations(commandMeta.logs.option_type_name || {})
                         .setDescription('Log type to configure')
-                        .setDescriptionLocalizations(commandMeta.logs.option_type)
+                        .setDescriptionLocalizations(commandMeta.logs.option_type_description || {})
                         .setRequired(true)
                         .addChoices(
                             { name: 'Messages (Delete + Edit)', value: 'messages', name_localizations: commandMeta.logs.type_messages },
@@ -45,8 +46,9 @@ module.exports = {
                 )
                 .addChannelOption(option =>
                     option.setName('channel')
+                        .setNameLocalizations(commandMeta.logs.option_channel_name || {})
                         .setDescription('Channel to send logs to')
-                        .setDescriptionLocalizations(commandMeta.logs.option_channel)
+                        .setDescriptionLocalizations(commandMeta.logs.option_channel_description || {})
                         .addChannelTypes(ChannelType.GuildText)
                         .setRequired(true)
                 )
@@ -59,8 +61,9 @@ module.exports = {
                 .setDescriptionLocalizations(commandMeta.logs.disable_description)
                 .addStringOption(option =>
                     option.setName('type')
+                        .setNameLocalizations(commandMeta.logs.option_type_name || {})
                         .setDescription('Log type to disable')
-                        .setDescriptionLocalizations(commandMeta.logs.option_type)
+                        .setDescriptionLocalizations(commandMeta.logs.option_type_description || {})
                         .setRequired(true)
                         .addChoices(
                             { name: 'Messages', value: 'messages', name_localizations: commandMeta.logs.type_messages },
@@ -89,8 +92,9 @@ module.exports = {
                 .setDescriptionLocalizations(commandMeta.logs.ignore_bots_description)
                 .addBooleanOption(option =>
                     option.setName('enabled')
+                        .setNameLocalizations(commandMeta.logs.option_enabled_name || {})
                         .setDescription('Whether to ignore bot messages')
-                        .setDescriptionLocalizations(commandMeta.logs.option_enabled)
+                        .setDescriptionLocalizations(commandMeta.logs.option_enabled_description || {})
                         .setRequired(true)
                 )
         ),

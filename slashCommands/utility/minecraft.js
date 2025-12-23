@@ -41,11 +41,12 @@ module.exports = {
                 .setNameLocalizations(commandMeta.minecraft.server_name)
                 .setDescription("Get the status of a Minecraft Server")
                 .setDescriptionLocalizations(commandMeta.minecraft.server_description)
-                .addStringOption(o => o.setName("address").setDescription("IP Address").setDescriptionLocalizations(commandMeta.minecraft.option_address).setRequired(true))
+                .addStringOption(o => o.setName("address").setNameLocalizations(commandMeta.minecraft.option_address_name || {}).setDescription("IP Address").setDescriptionLocalizations(commandMeta.minecraft.option_address_description || {}).setRequired(true))
                 .addStringOption(o =>
                     o.setName("edition")
+                        .setNameLocalizations(commandMeta.minecraft.option_edition_name || {})
                         .setDescription("Edition")
-                        .setDescriptionLocalizations(commandMeta.minecraft.option_edition)
+                        .setDescriptionLocalizations(commandMeta.minecraft.option_edition_description || {})
                         .addChoices(
                             { name: "Java", value: "java", name_localizations: commandMeta.minecraft.edition_java },
                             { name: "Bedrock", value: "bedrock", name_localizations: commandMeta.minecraft.edition_bedrock }
@@ -57,11 +58,12 @@ module.exports = {
                 .setNameLocalizations(commandMeta.minecraft.skin_name)
                 .setDescription("Get the skin of a Minecraft player")
                 .setDescriptionLocalizations(commandMeta.minecraft.skin_description)
-                .addStringOption(o => o.setName("username").setDescription("Username/UUID").setDescriptionLocalizations(commandMeta.minecraft.option_username).setRequired(true))
+                .addStringOption(o => o.setName("username").setNameLocalizations(commandMeta.minecraft.option_username_name || {}).setDescription("Username/UUID").setDescriptionLocalizations(commandMeta.minecraft.option_username_description || {}).setRequired(true))
                 .addStringOption(o =>
                     o.setName("type")
+                        .setNameLocalizations(commandMeta.minecraft.option_type_name || {})
                         .setDescription("Render type")
-                        .setDescriptionLocalizations(commandMeta.minecraft.option_type)
+                        .setDescriptionLocalizations(commandMeta.minecraft.option_type_description || {})
                         .addChoices(
                             { name: "Headshot", value: "headshot", name_localizations: commandMeta.minecraft.type_headshot },
                             { name: "Full Body", value: "full-body", name_localizations: commandMeta.minecraft.type_full_body },
@@ -186,16 +188,73 @@ module.exports = {
             const p = await resolve(username);
             if (!p) return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:minecraft.unknown_player')}` });
 
-            const base = "https://crafatar.com";
-            let img;
+            const getCrafatarUrl = (type, uuid) => {
+                const base = "https://crafatar.com";
+                switch (type) {
+                    case "headshot": return `${base}/avatars/${uuid}.png?size=256&overlay`;
+                    case "full-body": return `${base}/renders/body/${uuid}.png?scale=10&overlay`;
+                    case "skin": return `${base}/skins/${uuid}`;
+                    case "head": return `${base}/renders/head/${uuid}.png?scale=10&overlay`;
+                    case "cape": return `${base}/capes/${uuid}.png`;
+                    default: return null;
+                }
+            };
 
-            if (type === "headshot") img = `${base}/avatars/${p.uuid}.png?size=256&overlay`;
-            if (type === "full-body") img = `${base}/renders/body/${p.uuid}.png?scale=10&overlay`;
-            if (type === "skin") img = `${base}/skins/${p.uuid}`;
-            if (type === "head") img = `${base}/renders/head/${p.uuid}.png?scale=10&overlay`;
-            if (type === "cape") img = `${base}/capes/${p.uuid}.png`;
+            const getMineskinUrls = (type, uuid) => {
+                const base = "https://mineskin.eu";
+                switch (type) {
+                    case "headshot":
+                        return [
+                            `${base}/helm/${uuid}/256.png`,
+                            `${base}/avatar/${uuid}/256.png`
+                        ];
+                    case "full-body":
+                        return [
+                            `${base}/armor/body/${uuid}/100.png`,
+                            `${base}/body/${uuid}/100.png`
+                        ];
+                    case "skin":
+                        return [`${base}/skin/${uuid}`];
+                    case "head":
+                        return [
+                            `${base}/headhelm/${uuid}/100.png`,
+                            `${base}/head/${uuid}/100.png`
+                        ];
+                    case "cape": return [];
+                    default: return [];
+                }
+            };
+
+            let images = [];
+            let downloadUrl = `https://crafatar.com/skins/${p.uuid}`;
+            let source = "Crafatar";
+
+            const crafatarImg = getCrafatarUrl(type, p.uuid);
+
+            try {
+                if (!crafatarImg) throw new Error("Invalid type for Crafatar");
+                await axios.head(crafatarImg, { timeout: 1500 });
+                images.push(crafatarImg);
+            } catch (err) {
+                source = "Mineskin";
+                const mineskinUrls = getMineskinUrls(type, p.uuid);
+                if (mineskinUrls.length > 0) {
+                    images = mineskinUrls;
+                    downloadUrl = `https://mineskin.eu/download/${p.uuid}`;
+                    logger.debug(`[Minecraft] Crafatar unreachable, using Mineskin fallback for ${type}`);
+                }
+            }
+
+            if (images.length === 0) {
+                return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:minecraft.skin_fetch_error') || "Could not fetch skin."}` });
+            }
 
             const thumbURL = interaction.client.user.displayAvatarURL({ size: 64 });
+            const gallery = new MediaGalleryBuilder();
+
+            for (const img of images) {
+                gallery.addItems(new MediaGalleryItemBuilder().setURL(img));
+            }
 
             const container = [
                 new ContainerBuilder()
@@ -205,21 +264,16 @@ module.exports = {
                             .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbURL))
                             .addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent(`# ${p.name}`),
-                                new TextDisplayBuilder().setContent(`-# ${type.replace("-", " ")}`)
+                                new TextDisplayBuilder().setContent(`-# ${type.replace("-", " ")} (${source})`)
                             )
                     )
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
-                    .addMediaGalleryComponents(
-                        new MediaGalleryBuilder()
-                            .addItems(
-                                new MediaGalleryItemBuilder().setURL(img)
-                            )
-                    )
+                    .addMediaGalleryComponents(gallery)
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                     .addActionRowComponents(
                         new ActionRowBuilder()
                             .addComponents(
-                                new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(t('commands:minecraft.download_skin')).setURL(p.skin)
+                                new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(t('commands:minecraft.download_skin')).setURL(downloadUrl)
                             )
                     )
             ];

@@ -98,6 +98,51 @@ module.exports = {
                 logger.debug(`[MemberRemove] Logging ${logType} for ${member.id} in ${member.guild.id}`);
             }
 
+            let inviteData = null;
+
+            try {
+                const { Server } = require('../schemas/servers.js');
+                const { ServerStats } = require('../schemas/serverStats.js');
+
+                const serverData = await Server.findOne({ serverID: member.guild.id });
+                if (serverData?.serverStats?.enabled) {
+                    const stats = await ServerStats.findOne({ guildId: member.guild.id });
+                    if (stats) {
+                        const joinRecord = stats.memberJoins
+                            .sort((a, b) => b.joinedAt - a.joinedAt)
+                            .find(j => j.userId === member.id);
+
+                        if (joinRecord) {
+                            inviteData = {
+                                code: joinRecord.inviteCode,
+                                inviterId: joinRecord.inviterId
+                            };
+
+                            if (settings.debug === 'true') logger.debug(`[MemberRemove] Removing join records for userId: ${member.id}`);
+
+                            const pullResult = await ServerStats.updateOne(
+                                { guildId: member.guild.id },
+                                { $pull: { memberJoins: { userId: member.id } } }
+                            );
+
+                            if (settings.debug === 'true') logger.debug(`[MemberRemove] Removed ${pullResult.modifiedCount} join entries for ${member.id}`);
+
+                            if (joinRecord.inviteCode) {
+                                await ServerStats.updateOne(
+                                    { guildId: member.guild.id, 'invites.code': joinRecord.inviteCode },
+                                    { $inc: { 'invites.$.uses': -1 } }
+                                );
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                logger.debug(`[MemberRemove] Failed to fetch invite data: ${err.message}`);
+            }
+
+            if (inviteData) {
+                logData.inviteData = inviteData;
+            }
             await modLog.logEvent(bot, member.guild.id, logType, logData);
 
         } catch (error) {

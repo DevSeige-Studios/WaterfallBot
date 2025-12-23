@@ -19,5 +19,15 @@ module.exports = {
         } catch (error) {
             logger.error("[DailyWorker] Failed to cleanup warns:", error);
         }
+
+        try {
+            const { cleanupPendingDeletions } = require("./util/dataCleanup.js");
+            const result = await cleanupPendingDeletions();
+            if (result.deleted > 0) {
+                logger.info(`[DailyWorker] Cleaned up ${result.deleted} pending server deletions.`);
+            }
+        } catch (error) {
+            logger.error("[DailyWorker] Failed to cleanup pending deletions:", error);
+        }
     }
 };

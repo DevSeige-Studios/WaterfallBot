@@ -255,16 +255,16 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.automod.setup_description)
             .addChannelOption(opt => opt
                 .setName("log-channel")
+                .setNameLocalizations(commandMeta.automod.advanced_log_channel_name || {})
                 .setDescription("Channel for logging violations")
-                .setNameLocalizations(commandMeta.automod.advanced_log_channel)
-                .setDescriptionLocalizations(commandMeta.automod.advanced_log_channel_desc)
+                .setDescriptionLocalizations(commandMeta.automod.advanced_log_channel_description || {})
                 .setRequired(false)
             )
             .addStringOption(opt => opt
                 .setName("timeout")
+                .setNameLocalizations(commandMeta.automod.setup_timeout_name || {})
                 .setDescription("Duration for timeout action (optional)")
-                .setNameLocalizations(commandMeta.automod.setup_timeout)
-                .setDescriptionLocalizations(commandMeta.automod.setup_timeout_desc)
+                .setDescriptionLocalizations(commandMeta.automod.setup_timeout_description || {})
                 .setRequired(false)
                 .addChoices(
                     { name: "60 Seconds", value: "60s", name_localizations: commandMeta.automod.durations["60s"] },
@@ -289,16 +289,16 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.automod.create_description)
             .addStringOption(opt => opt
                 .setName("name")
+                .setNameLocalizations(commandMeta.automod.create_rule_name_name || {})
                 .setDescription("Rule name")
-                .setNameLocalizations(commandMeta.automod.create_rule_name)
-                .setDescriptionLocalizations(commandMeta.automod.create_rule_name_desc)
+                .setDescriptionLocalizations(commandMeta.automod.create_rule_name_description || {})
                 .setRequired(true)
             )
             .addStringOption(opt => opt
                 .setName("type")
+                .setNameLocalizations(commandMeta.automod.create_type_name || {})
                 .setDescription("Rule type")
-                .setNameLocalizations(commandMeta.automod.create_type)
-                .setDescriptionLocalizations(commandMeta.automod.create_type_desc)
+                .setDescriptionLocalizations(commandMeta.automod.create_type_description || {})
                 .setRequired(true)
                 .addChoices(
                     { name: "Block Keywords", value: "keyword", name_localizations: commandMeta.automod.rule_type_choices.keyword },
@@ -310,16 +310,16 @@ module.exports = {
             )
             .addStringOption(opt => opt
                 .setName("trigger")
+                .setNameLocalizations(commandMeta.automod.create_trigger_name || {})
                 .setDescription("Trigger words/patterns (comma separated for keywords)")
-                .setNameLocalizations(commandMeta.automod.create_trigger)
-                .setDescriptionLocalizations(commandMeta.automod.create_trigger_desc)
+                .setDescriptionLocalizations(commandMeta.automod.create_trigger_description || {})
                 .setRequired(false)
             )
             .addStringOption(opt => opt
                 .setName("action")
+                .setNameLocalizations(commandMeta.automod.create_action_name || {})
                 .setDescription("Action to take")
-                .setNameLocalizations(commandMeta.automod.create_action)
-                .setDescriptionLocalizations(commandMeta.automod.create_action_desc)
+                .setDescriptionLocalizations(commandMeta.automod.create_action_description || {})
                 .setRequired(false)
                 .addChoices(
                     { name: "Block Message", value: "block", name_localizations: commandMeta.automod.action_choices.block },
@@ -329,9 +329,9 @@ module.exports = {
             )
             .addStringOption(opt => opt
                 .setName("duration")
+                .setNameLocalizations(commandMeta.automod.create_duration_name || {})
                 .setDescription("Timeout duration (if action is timeout)")
-                .setNameLocalizations(commandMeta.automod.create_duration)
-                .setDescriptionLocalizations(commandMeta.automod.create_duration_desc)
+                .setDescriptionLocalizations(commandMeta.automod.create_duration_description || {})
                 .setRequired(false)
                 .addChoices(
                     { name: "60 Seconds", value: "60s", name_localizations: commandMeta.automod.durations["60s"] },
@@ -344,9 +344,9 @@ module.exports = {
             )
             .addChannelOption(opt => opt
                 .setName("log-channel")
+                .setNameLocalizations(commandMeta.automod.advanced_log_channel_name || {})
                 .setDescription("Channel for logging violations")
-                .setNameLocalizations(commandMeta.automod.advanced_log_channel)
-                .setDescriptionLocalizations(commandMeta.automod.advanced_log_channel_desc)
+                .setDescriptionLocalizations(commandMeta.automod.advanced_log_channel_description || {})
                 .setRequired(false)
             )
         )
@@ -357,30 +357,30 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.automod.advanced_description)
             .addStringOption(opt => opt
                 .setName("name")
+                .setNameLocalizations(commandMeta.automod.create_rule_name_name || {})
                 .setDescription("Rule name")
-                .setNameLocalizations(commandMeta.automod.create_rule_name)
-                .setDescriptionLocalizations(commandMeta.automod.create_rule_name_desc)
+                .setDescriptionLocalizations(commandMeta.automod.create_rule_name_description || {})
                 .setRequired(true)
             )
             .addStringOption(opt => opt
                 .setName("keyword")
+                .setNameLocalizations(commandMeta.automod.advanced_keyword_name || {})
                 .setDescription("Base keyword to protect")
-                .setNameLocalizations(commandMeta.automod.advanced_keyword)
-                .setDescriptionLocalizations(commandMeta.automod.advanced_keyword_desc)
+                .setDescriptionLocalizations(commandMeta.automod.advanced_keyword_description || {})
                 .setRequired(true)
             )
             .addChannelOption(opt => opt
                 .setName("log-channel")
+                .setNameLocalizations(commandMeta.automod.advanced_log_channel_name || {})
                 .setDescription("Channel for logging violations (optional)")
-                .setNameLocalizations(commandMeta.automod.advanced_log_channel)
-                .setDescriptionLocalizations(commandMeta.automod.advanced_log_channel_desc)
+                .setDescriptionLocalizations(commandMeta.automod.advanced_log_channel_description || {})
                 .setRequired(false)
             )
             .addStringOption(opt => opt
                 .setName("timeout")
+                .setNameLocalizations(commandMeta.automod.setup_timeout_name || {})
                 .setDescription("Duration for timeout action (optional)")
-                .setNameLocalizations(commandMeta.automod.setup_timeout)
-                .setDescriptionLocalizations(commandMeta.automod.setup_timeout_desc)
+                .setDescriptionLocalizations(commandMeta.automod.setup_timeout_description || {})
                 .setRequired(false)
                 .addChoices(
                     { name: "60 Seconds", value: "60s", name_localizations: commandMeta.automod.durations["60s"] },
@@ -399,9 +399,9 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.automod.delete_description)
             .addStringOption(opt => opt
                 .setName("rule")
+                .setNameLocalizations(commandMeta.automod.delete_rule_name || {})
                 .setDescription("Select a rule")
-                .setNameLocalizations(commandMeta.automod.delete_rule)
-                .setDescriptionLocalizations(commandMeta.automod.delete_rule_desc)
+                .setDescriptionLocalizations(commandMeta.automod.delete_rule_description || {})
                 .setRequired(true)
                 .setAutocomplete(true)
             )
@@ -413,17 +413,17 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.automod.toggle_description)
             .addStringOption(opt => opt
                 .setName("rule")
+                .setNameLocalizations(commandMeta.automod.toggle_rule_name || {})
                 .setDescription("Select a rule")
-                .setNameLocalizations(commandMeta.automod.toggle_rule)
-                .setDescriptionLocalizations(commandMeta.automod.toggle_rule_desc)
+                .setDescriptionLocalizations(commandMeta.automod.toggle_rule_description || {})
                 .setRequired(true)
                 .setAutocomplete(true)
             )
             .addBooleanOption(opt => opt
                 .setName("enabled")
+                .setNameLocalizations(commandMeta.automod.toggle_enabled_name || {})
                 .setDescription("Enable the rule")
-                .setNameLocalizations(commandMeta.automod.toggle_enabled)
-                .setDescriptionLocalizations(commandMeta.automod.toggle_enabled_desc)
+                .setDescriptionLocalizations(commandMeta.automod.toggle_enabled_description || {})
                 .setRequired(true)
             )
         ),

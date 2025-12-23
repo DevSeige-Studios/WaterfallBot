@@ -6,6 +6,8 @@ const { GOOGLE_API_KEY, GOOGLE_CSE_ID, SERPAPI_KEY, OMDB_API_KEY } = process.env
 const { getJson } = require('serpapi');
 const e = require("../../data/emoji.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
+const logger = require("../../logger.js");
+const funcs = require("../../util/functions.js");
 
 async function getLogoUrl(domain) {
     return `https://logo.clearbit.com/${domain}`;
@@ -454,8 +456,6 @@ async function buildSerpApiComponent(res, page, totalPages, engineName, color, e
     const serpPrevId = `search_${engineName}_prev_${page - 1}_${sessionId}`;
     const serpNextId = `search_${engineName}_next_${page + 1}_${sessionId}`;
     const expired = isPaginationExpired(sessionId);
-
-    //console.debug("Search result data:", JSON.stringify(res, null, 2));
 
     const engineLogos = {
         google: 'https://www.google.com/s2/favicons?domain=google.com&sz=256',
@@ -1093,6 +1093,286 @@ async function buildSerpApiComponent(res, page, totalPages, engineName, color, e
     return container;
 }
 
+const WIKIPEDIA_AUTOCOMPLETE_CACHE = new Map();
+const WIKIPEDIA_RATE_LIMIT = new Map();
+const WIKIPEDIA_COOLDOWN = 500;
+const WIKIPEDIA_CACHE_TTL = 5 * 60 * 1000;
+const WIKIPEDIA_CACHE_MAX_SIZE = 100;
+const WIKIPEDIA_USER_AGENT = 'Waterfall/1.0 (Discord Bot; devseige@gmail.com)';
+
+async function getWikipediaAutocomplete(query, userId) {
+    logger.debug(`[Wikipedia Autocomplete] Called with query="${query}", userId=${userId}`);
+
+    const cached = WIKIPEDIA_AUTOCOMPLETE_CACHE.get(query);
+    if (cached) {
+        const age = Date.now() - cached.timestamp;
+        if (age < WIKIPEDIA_CACHE_TTL) {
+            logger.debug(`[Wikipedia Autocomplete] Cache hit for "${query}": ${cached.results.length} results (age: ${Math.floor(age / 1000)}s)`);
+            return cached.results;
+        } else {
+            logger.debug(`[Wikipedia Autocomplete] Cache expired for "${query}" (age: ${Math.floor(age / 1000)}s)`);
+            WIKIPEDIA_AUTOCOMPLETE_CACHE.delete(query);
+        }
+    }
+
+    const now = Date.now();
+    const lastRequest = WIKIPEDIA_RATE_LIMIT.get(userId) || 0;
+    if (now - lastRequest < WIKIPEDIA_COOLDOWN) {
+        logger.debug(`[Wikipedia Autocomplete] Rate limited for userId=${userId}, skipping API call`);
+        for (const [key, entry] of WIKIPEDIA_AUTOCOMPLETE_CACHE) {
+            const age = Date.now() - entry.timestamp;
+            if (age >= WIKIPEDIA_CACHE_TTL) continue;
+            if (query.startsWith(key) && entry.results.length > 0) {
+                const filtered = entry.results.filter(s => s.toLowerCase().includes(query.toLowerCase()));
+                logger.debug(`[Wikipedia Autocomplete] Using filtered prefix cache from "${key}": ${filtered.length} results`);
+                return filtered;
+            }
+        }
+        return [];
+    }
+    WIKIPEDIA_RATE_LIMIT.set(userId, now);
+
+    try {
+        const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=25&namespace=0&format=json`;
+        logger.debug(`[Wikipedia Autocomplete] Fetching: ${url}`);
+        const res = await axios.get(url, {
+            timeout: 3000,
+            headers: {
+                'User-Agent': WIKIPEDIA_USER_AGENT
+            }
+        });
+        logger.debug(`[Wikipedia Autocomplete] Response status: ${res.status}`);
+        const suggestions = res.data[1] || [];
+        logger.debug(`[Wikipedia Autocomplete] Got ${suggestions.length} suggestions`);
+
+        if (WIKIPEDIA_AUTOCOMPLETE_CACHE.size >= WIKIPEDIA_CACHE_MAX_SIZE) {
+            const oldestKey = WIKIPEDIA_AUTOCOMPLETE_CACHE.keys().next().value;
+            WIKIPEDIA_AUTOCOMPLETE_CACHE.delete(oldestKey);
+            logger.debug(`[Wikipedia Autocomplete] Cache limit reached, removed oldest entry: "${oldestKey}"`);
+        }
+
+        WIKIPEDIA_AUTOCOMPLETE_CACHE.set(query, {
+            results: suggestions,
+            timestamp: Date.now()
+        });
+        return suggestions;
+    } catch (err) {
+        logger.error(`[Wikipedia Autocomplete] Error fetching suggestions: ${err.message}`);
+        logger.debug(`[Wikipedia Autocomplete] Full error:`, err);
+        return [];
+    }
+}
+
+
+async function handleWikipedia(interaction, query, page = 1, isPagination = false, sessionId = null, t) {
+    const userId = interaction.user.id;
+    const sid = sessionId || makeSessionId('wiki', query, userId);
+    let articles, totalPages;
+
+    if (!isPagination) {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        try {
+            const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=20&format=json`;
+            const searchRes = await axios.get(searchUrl, {
+                timeout: 5000,
+                headers: { 'User-Agent': WIKIPEDIA_USER_AGENT }
+            });
+            const searchResults = searchRes.data?.query?.search || [];
+            if (!searchResults.length) {
+                return interaction.editReply({ content: `${e.not_found} ${t('commands:search.wikipedia.no_article_found')}` });
+            }
+            const articlePromises = searchResults.slice(0, 10).map(async (sr) => {
+                try {
+                    const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(sr.title)}`;
+                    const summaryRes = await axios.get(summaryUrl, {
+                        timeout: 3000,
+                        headers: { 'User-Agent': WIKIPEDIA_USER_AGENT }
+                    });
+                    return summaryRes.data;
+                } catch {
+                    return null;
+                }
+            });
+            articles = (await Promise.all(articlePromises)).filter(a => a && a.extract);
+            if (!articles.length) {
+                return interaction.editReply({ content: `${e.not_found} ${t('commands:search.wikipedia.no_article_found')}` });
+            }
+            totalPages = articles.length;
+            setPaginationCache(sid, articles, { query, totalPages }, userId);
+        } catch (err) {
+            logger.error(`[Wikipedia Search] Error searching for "${query}": ${err.message}`);
+            logger.debug(`[Wikipedia Search] Full error:`, err);
+            return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_error', { engine: 'Wikipedia' })}` });
+        }
+    } else {
+        const cache = getPaginationCache(sid);
+        if (!cache) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        articles = cache.results;
+        totalPages = cache.meta.totalPages;
+        await interaction.deferUpdate();
+    }
+
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+    const article = articles[currentPage - 1];
+    const wikiEmoji = e.icon_wikipedia || '📖';
+    const wikiLogoUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/220px-Wikipedia-logo-v2.svg.png';
+    const articleUrl = article.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(article.title)}`;
+    const prevId = `search_wiki_prev_${currentPage - 1}_${sid}`;
+    const nextId = `search_wiki_next_${currentPage + 1}_${sid}`;
+
+    const thumb = article.thumbnail;
+    const originalImg = article.originalimage;
+    let useLandscapeGallery = false;
+    let galleryImageUrl = null;
+    let thumbnailUrl = wikiLogoUrl;
+
+    if (thumb && thumb.width && thumb.height) {
+        if (thumb.width > thumb.height) {
+            useLandscapeGallery = true;
+            galleryImageUrl = thumb.source;
+            thumbnailUrl = wikiLogoUrl;
+        } else {
+            thumbnailUrl = thumb.source;
+        }
+    } else if (originalImg && originalImg.width && originalImg.height) {
+        if (originalImg.width > originalImg.height) {
+            useLandscapeGallery = true;
+            galleryImageUrl = originalImg.source;
+            thumbnailUrl = wikiLogoUrl;
+        } else {
+            thumbnailUrl = originalImg.source;
+        }
+    }
+
+    const orderedContent = [];
+
+    if (article.description) {
+        orderedContent.push(`-# ${article.description}`);
+    }
+
+    if (article.type && article.type !== 'standard') {
+        orderedContent.push(`-# **Type:** ${article.type}`);
+    }
+
+    if (article.timestamp) {
+        const timestamp = Math.floor(new Date(article.timestamp).getTime() / 1000);
+        orderedContent.push(`-# **Last Updated:** <t:${timestamp}:R>`);
+    }
+
+    if (article.extract) {
+        orderedContent.push(`\n${article.extract.slice(0, 2000)}`);
+    }
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailUrl))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${wikiEmoji} ${article.title}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [wikipedia.org](${articleUrl})`)
+        );
+
+    const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.prev')).setCustomId(prevId).setDisabled(page === 1),
+        new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.next')).setCustomId(nextId).setDisabled(page === totalPages),
+        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(t('commands:search.wikipedia.read_more')).setURL(articleUrl)
+    );
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x636466)
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')));
+
+    if (useLandscapeGallery && galleryImageUrl) {
+        const mediaGallery = new MediaGalleryBuilder().addItems(
+            new MediaGalleryItemBuilder().setURL(galleryImageUrl)
+        );
+        container.addMediaGalleryComponents(mediaGallery);
+    }
+
+    container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('common:pagination.page_of', { current: currentPage, total: totalPages })}`));
+    container.addActionRowComponents(actionRow);
+
+    await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+}
+
+async function handleStackOverflow(interaction, query, page = 1, isPagination = false, sessionId = null, t) {
+    const userId = interaction.user.id;
+    const sid = sessionId || makeSessionId('so', query, userId);
+    let questions, totalPages;
+
+    if (!isPagination) {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        try {
+            const url = `https://api.stackexchange.com/2.3/search?order=desc&sort=relevance&intitle=${encodeURIComponent(query)}&site=stackoverflow&pagesize=20&filter=withbody`;
+            const res = await axios.get(url, { timeout: 5000 });
+            questions = res.data?.items || [];
+            if (!questions.length) {
+                return interaction.editReply({ content: `${e.not_found} ${t('commands:search.stackoverflow.no_results')}` });
+            }
+            totalPages = Math.min(questions.length, 20);
+            setPaginationCache(sid, questions.slice(0, 20), { query, totalPages }, userId);
+        } catch {
+            return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_error', { engine: 'StackOverflow' })}` });
+        }
+    } else {
+        const cache = getPaginationCache(sid);
+        if (!cache) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        questions = cache.results;
+        totalPages = cache.meta.totalPages;
+        await interaction.deferUpdate();
+    }
+
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+    const q = questions[currentPage - 1];
+    const soEmoji = e.icon_stackoverflow || '📚';
+    const prevId = `search_so_prev_${currentPage - 1}_${sid}`;
+    const nextId = `search_so_next_${currentPage + 1}_${sid}`;
+
+    const orderedContent = [];
+    orderedContent.push(`-# **${t('commands:search.stackoverflow.votes')}:** ${funcs.abbr(q.score)} | **${t('commands:search.stackoverflow.answers')}:** ${funcs.abbr(q.answer_count)} | **${t('commands:search.stackoverflow.views')}:** ${funcs.abbr(q.view_count)}`);
+    if (q.creation_date) orderedContent.push(`-# **${t('commands:search.stackoverflow.asked')}:** <t:${q.creation_date}:R>`);
+    if (q.tags?.length) orderedContent.push(`-# **${t('commands:search.stackoverflow.tags')}:** ${q.tags.slice(0, 5).join(', ')}`);
+    if (q.is_answered) orderedContent.push(`-# ${e.verified_check_bw} ${t('commands:search.stackoverflow.accepted')}`);
+    orderedContent.push('');
+    const bodyText = q.body?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500) || '';
+    if (bodyText) orderedContent.push(funcs.decodeHtmlEntities(bodyText));
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://cdn.sstatic.net/Sites/stackoverflow/Img/apple-touch-icon.png'))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${soEmoji} ${funcs.decodeHtmlEntities(q.title?.slice(0, 100)) || query}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [stackoverflow.com](${q.link})`)
+        );
+
+    const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.prev')).setCustomId(prevId).setDisabled(page === 1),
+        new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.next')).setCustomId(nextId).setDisabled(page === totalPages),
+        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(t('common:visit')).setURL(q.link)
+    );
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0xF48024)
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')))
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('common:pagination.page_of', { current: currentPage, total: totalPages })}`))
+        .addActionRowComponents(actionRow);
+
+    await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+}
+
 
 async function filterQuery(query) {
     try {
@@ -1343,6 +1623,46 @@ async function handleSearchPagination(interaction, t) {
         );
         return;
     }
+
+    const wikiMatch = id.match(/^search_wiki_(prev|next)_(\d+)_(.+)$/);
+    if (wikiMatch) {
+        const [, direction, pageStr, sessionIdRaw] = wikiMatch;
+        sessionId = sessionIdRaw;
+        page = Math.max(1, parseInt(pageStr, 10));
+        if (isPaginationExpired(sessionId)) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+        }
+        const cache = getPaginationCache(sessionId);
+        if (!cache) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        await handleWikipedia(interaction, cache.meta.query, page, true, sessionId, t);
+        return;
+    }
+
+    const soMatch = id.match(/^search_so_(prev|next)_(\d+)_(.+)$/);
+    if (soMatch) {
+        const [, direction, pageStr, sessionIdRaw] = soMatch;
+        sessionId = sessionIdRaw;
+        page = Math.max(1, parseInt(pageStr, 10));
+        if (isPaginationExpired(sessionId)) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+        }
+        const cache = getPaginationCache(sessionId);
+        if (!cache) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        await handleStackOverflow(interaction, cache.meta.query, page, true, sessionId, t);
+        return;
+    }
+
+
 }
 //
 module.exports = {
@@ -1351,12 +1671,15 @@ module.exports = {
         .setNameLocalizations(commandMeta.search.name)
         .setDescription('Search the web')
         .setDescriptionLocalizations(commandMeta.search.description)
-        .addSubcommand(sub => sub.setName('duckduckgo').setNameLocalizations(commandMeta.search.duckduckgo_name).setDescription('Search DuckDuckGo').setDescriptionLocalizations(commandMeta.search.duckduckgo_description).addStringOption(opt => opt.setName('query').setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query).setRequired(true)))
-        .addSubcommand(sub => sub.setName('google').setNameLocalizations(commandMeta.search.google_name).setDescription('Search Google').setDescriptionLocalizations(commandMeta.search.google_description).addStringOption(opt => opt.setName('query').setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query).setRequired(true)))
-        .addSubcommand(sub => sub.setName('bing').setNameLocalizations(commandMeta.search.bing_name).setDescription('Search Bing').setDescriptionLocalizations(commandMeta.search.bing_description).addStringOption(opt => opt.setName('query').setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query).setRequired(true)))
-        .addSubcommand(sub => sub.setName('yahoo').setNameLocalizations(commandMeta.search.yahoo_name).setDescription('Search Yahoo').setDescriptionLocalizations(commandMeta.search.yahoo_description).addStringOption(opt => opt.setName('query').setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query).setRequired(true)))
-        //.addSubcommand(sub => sub.setName('yandex').setNameLocalizations(commandMeta.search.yandex_name).setDescription('Search Yandex').setDescriptionLocalizations(commandMeta.search.yandex_description).addStringOption(opt => opt.setName('query').setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query).setRequired(true)))
-        .addSubcommand(sub => sub.setName('queries').setNameLocalizations(commandMeta.search.queries_name).setDescription('Get links to all search engines').setDescriptionLocalizations(commandMeta.search.queries_description).addStringOption(opt => opt.setName('query').setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query).setRequired(true))),
+        .addSubcommand(sub => sub.setName('duckduckgo').setNameLocalizations(commandMeta.search.duckduckgo_name).setDescription('Search DuckDuckGo').setDescriptionLocalizations(commandMeta.search.duckduckgo_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+        .addSubcommand(sub => sub.setName('google').setNameLocalizations(commandMeta.search.google_name).setDescription('Search Google').setDescriptionLocalizations(commandMeta.search.google_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+        .addSubcommand(sub => sub.setName('bing').setNameLocalizations(commandMeta.search.bing_name).setDescription('Search Bing').setDescriptionLocalizations(commandMeta.search.bing_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+        .addSubcommand(sub => sub.setName('yahoo').setNameLocalizations(commandMeta.search.yahoo_name).setDescription('Search Yahoo').setDescriptionLocalizations(commandMeta.search.yahoo_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+        //.addSubcommand(sub => sub.setName('yandex').setNameLocalizations(commandMeta.search.yandex_name).setDescription('Search Yandex').setDescriptionLocalizations(commandMeta.search.yandex_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+        .addSubcommand(sub => sub.setName('wikipedia').setNameLocalizations(commandMeta.search.wikipedia_name || {}).setDescription('Search Wikipedia').setDescriptionLocalizations(commandMeta.search.wikipedia_description || {}).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true).setAutocomplete(true)))
+        .addSubcommand(sub => sub.setName('stackoverflow').setNameLocalizations(commandMeta.search.stackoverflow_name || {}).setDescription('Search StackOverflow').setDescriptionLocalizations(commandMeta.search.stackoverflow_description || {}).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+
+        .addSubcommand(sub => sub.setName('queries').setNameLocalizations(commandMeta.search.queries_name).setDescription('Get links to all search engines').setDescriptionLocalizations(commandMeta.search.queries_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true))),
     integration_types: [0, 1],
     contexts: [0, 1, 2],
     dev: false,
@@ -1384,6 +1707,11 @@ module.exports = {
             await handleSerpApiEngine(interaction, safeQuery, 'yahoo', 0x720E9E, e.icon_yahoo, 1, safeQuery, profanityDetected, false, null, t);
         } else if (sub === 'yandex') {
             await handleSerpApiEngine(interaction, safeQuery, 'yandex', 0xFF0000, e.forum, 1, safeQuery, profanityDetected, false, null, t);
+        } else if (sub === 'wikipedia') {
+            await handleWikipedia(interaction, safeQuery, 1, false, null, t);
+        } else if (sub === 'stackoverflow') {
+            await handleStackOverflow(interaction, safeQuery, 1, false, null, t);
+
         } else {
             if (interaction.deferred || interaction.replied) {
                 await interaction.editReply('<:search:1371166233788940460> Engine not implemented yet.');
@@ -1399,6 +1727,44 @@ module.exports = {
         permissions: [],
         botPermissions: [],
         created: 1765271948
+    },
+    async autocomplete(interaction, bot, settings) {
+        try {
+            logger.debug('[Autocomplete] Called for command:', interaction.commandName);
+            const focusedOption = interaction.options.getFocused(true);
+            logger.debug('[Autocomplete] Focused option:', focusedOption);
+
+            if (focusedOption.name === 'query') {
+                const query = focusedOption.value;
+                logger.debug('[Autocomplete] Query:', query);
+
+                if (!query || query.length < 2) {
+                    logger.debug('[Autocomplete] Query too short, returning empty');
+                    return await interaction.respond([]);
+                }
+
+                try {
+                    const suggestions = await getWikipediaAutocomplete(query, interaction.user.id);
+                    logger.debug(`[Autocomplete] Got ${suggestions.length} suggestions`);
+                    const choices = suggestions.slice(0, 25).map(s => ({ name: s, value: s }));
+                    return await interaction.respond(choices);
+                } catch (err) {
+                    logger.error('[Autocomplete] Error in getWikipediaAutocomplete:', err);
+                    logger.debug('[Autocomplete] Full error details:', err);
+                    return await interaction.respond([]);
+                }
+            } else {
+                logger.debug('[Autocomplete] Not a query option, returning empty');
+                return await interaction.respond([]);
+            }
+        } catch (err) {
+            logger.error('[Autocomplete] Top-level error:', err);
+            try {
+                return await interaction.respond([]);
+            } catch (respondErr) {
+                logger.error('[Autocomplete] Failed to send empty response:', respondErr);
+            }
+        }
     },
     handleSearchPagination,
     filterQuery

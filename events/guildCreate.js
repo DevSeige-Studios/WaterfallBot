@@ -34,9 +34,15 @@ module.exports = {
 
             await Server.findOneAndUpdate(
                 { serverID: guild.id },
-                { language: preferredLang },
+                { language: preferredLang, $unset: { pendingDeletion: '' } },
                 { upsert: true, new: true }
             );
+
+            const { cancelPendingDeletion } = require('../util/dataCleanup.js');
+            await cancelPendingDeletion(guild.id);
+
+            const inviteTracker = require('../util/inviteTracker.js');
+            await inviteTracker.cacheInvites(guild);
 
             const t = i18n.getFixedT(preferredLang);
 

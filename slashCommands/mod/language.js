@@ -12,8 +12,9 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
         .addStringOption(option =>
             option.setName("type")
+                .setNameLocalizations(commandMeta.language.option_type_name || {})
                 .setDescription("Language to set")
-                .setDescriptionLocalizations(commandMeta.language.option_type)
+                .setDescriptionLocalizations(commandMeta.language.option_type_description || {})
                 .setRequired(true)
                 .addChoices(
                     { name: "Deutsch", value: "de" },

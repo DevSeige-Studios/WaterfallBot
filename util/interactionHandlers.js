@@ -101,6 +101,31 @@ async function handleButtonInteraction(bot, interaction, users, settings, logger
         await meme.handleButton(bot, interaction, t, logger);
         return;
     }
+    if (interaction.customId.startsWith('convert_raw_')) {
+        const parts = interaction.customId.split('_');
+        const allowedUserId = parts[2];
+        const rawValue = parts[3];
+        const unit = parts[4];
+
+        if (interaction.user.id !== allowedUserId) {
+            return interaction.reply({
+                content: `${e.pixel_cross} ${t('common:pagination.not_for_you')}`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        if (rawValue === 'unreadable') {
+            return interaction.reply({
+                content: `${e.pixel_cross} ${t('commands:convert.result_too_large')}`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        return interaction.reply({
+            content: `**Raw Value:** ${parseFloat(rawValue).toLocaleString(undefined, { maximumFractionDigits: 10 })} ${unit}`,
+            flags: MessageFlags.Ephemeral
+        });
+    }
 }
 
 

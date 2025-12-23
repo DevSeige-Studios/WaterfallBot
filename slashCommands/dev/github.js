@@ -38,7 +38,6 @@ module.exports = {
             return interaction.reply({ content: "An error occurred while executing the command.", flags: MessageFlags.Ephemeral });
         }
     },
-
     async pullUpdates(bot, interaction) {
         return new Promise((resolve) => {
             exec("git pull", { cwd: process.cwd() }, async (error, stdout, stderr) => {
@@ -106,7 +105,6 @@ module.exports = {
             });
         });
     },
-
     async checkStatus(interaction) {
         return new Promise((resolve) => {
             exec("git status --porcelain", { cwd: process.cwd() }, async (error, stdout) => {
@@ -125,7 +123,6 @@ module.exports = {
             });
         });
     },
-
     parseChangedFiles(gitOutput) {
         const files = [];
         const lines = gitOutput.split("\n");
@@ -149,17 +146,12 @@ module.exports = {
 
         return [...new Set(files.filter(Boolean))];
     },
-
     analyzeChanges(changedFiles) {
         const hotReloadable = [
             "slashCommands/",
             "contextCommands/",
             "events/",
-            "util/functions.js",
             "views/",
-            "schemas/",
-            "hourlyWorker.js",
-            "dailyWorker.js",
             "locales/"
         ];
 
@@ -168,13 +160,23 @@ module.exports = {
             "mongoose.js",
             "shardManager.js",
             "data/",
-            "util/interactionHandlers.js"
+            "util/interactionHandlers.js",
+            "util/functions.js",
+            "util/modLog.js",
+            "util/statsGraphRenderer.js",
+            "util/connect4_ai.js",
+            "util/rps_ai.js",
+            "util/inviteTracker.js",
+            "schemas/",
+            "hourlyWorker.js",
+            "dailyWorker.js"
         ];
 
         const containerRestartRequired = [
             "bot.js",
             "github.sh",
-            "logger.js"
+            "logger.js",
+            "package.json"
         ];
 
         const result = {
@@ -199,7 +201,6 @@ module.exports = {
 
         return result;
     },
-
     async hotReloadFiles(bot, files) {
         for (const file of files) {
             try {
@@ -220,7 +221,6 @@ module.exports = {
             }
         }
     },
-
     async reloadSlashCommand(bot, filePath) {
         const commandName = path.basename(filePath, ".js");
         const command = bot.slashCommands.get(commandName);
@@ -265,7 +265,6 @@ module.exports = {
             throw new Error(`Slash command reload failed: ${error.message}`);
         }
     },
-
     async reloadEvent(bot, filePath) {
         const eventPath = path.join(__dirname, "../../events", filePath.replace("events/", ""));
 
@@ -287,17 +286,14 @@ module.exports = {
             throw new Error(`Event reload failed: ${error.message}`);
         }
     },
-
     async reloadSettings() {
         const settingsPath = path.join(__dirname, "../../util/settings.json");
         delete require.cache[require.resolve(settingsPath)];
     },
-
     async reloadUtilFile(filePath) {
         const fullPath = path.join(__dirname, "../../", filePath);
         delete require.cache[require.resolve(fullPath)];
     },
-
     async reloadLocales(filePath) {
         const fullPath = path.join(__dirname, "../../", filePath);
         if (require.cache[require.resolve(fullPath)]) {
@@ -309,7 +305,6 @@ module.exports = {
 
         logger.info(`Cleared locale cache for: ${filePath}`);
     },
-
     traverse(dir, filename) {
         for (const dirent of fs.readdirSync(dir, { withFileTypes: true })) {
             const direntPath = path.join(dir, dirent.name);
@@ -323,7 +318,6 @@ module.exports = {
         }
         return null;
     },
-
     help: {
         name: "github",
         description: "GitHub repository management commands",

@@ -26,29 +26,9 @@ module.exports = {
         const t = i18n.getFixedT(interaction.locale);
 
         if (interaction.isAutocomplete()) {
-            if (interaction.commandName === "preferences") {
-                const command = bot.slashCommands.get("preferences");
-                if (command && typeof command.autocomplete === "function") {
-                    return command.autocomplete(interaction, bot, settings);
-                }
-            }
-            if (interaction.commandName === "find-server") {
-                const command = bot.slashCommands.get("find-server");
-                if (command && typeof command.autocomplete === "function") {
-                    return command.autocomplete(interaction, bot, settings);
-                }
-            }
-            if (interaction.commandName === "automod") {
-                const command = bot.slashCommands.get("automod");
-                if (command && typeof command.autocomplete === "function") {
-                    return command.autocomplete(interaction, bot, settings);
-                }
-            }
-            if (interaction.commandName === "warn") {
-                const command = bot.slashCommands.get("warn");
-                if (command && typeof command.autocomplete === "function") {
-                    return command.autocomplete(interaction, bot, settings);
-                }
+            const command = bot.slashCommands.get(interaction.commandName);
+            if (command && typeof command.autocomplete === "function") {
+                return command.autocomplete(interaction, bot, settings);
             }
         }
         if (interaction.isCommand()) {
@@ -170,28 +150,26 @@ module.exports = {
 
             cooldowns.set(userId, Date.now() + 850);
 
-            logger.setContext({
+            await logger.runWithContext({
                 guildId: interaction.guild?.id,
                 userId: interaction.user.id,
                 command: interaction.commandName,
                 channelId: interaction.channel?.id
-            });
-
-            try {
-                await command.execute(bot, interaction, funcs, settings, logger, t);
-                await interactionHandlers.handleNonCommandInteractions(bot, interaction, userId, users, alertCooldowns);
-            } catch (error) {
-                logger.error(error);
-                if (interaction.deferred) {
-                    await interaction.editReply({ content: `${e.pixel_warning} ${t('events:interaction.error_execution')}`, flags: MessageFlags.Ephemeral });
-                } else if (interaction.replied) {
-                    await interaction.followUp({ content: `${e.pixel_warning} ${t('events:interaction.error_execution')}`, flags: MessageFlags.Ephemeral });
-                } else {
-                    await interaction.reply({ content: `${e.pixel_warning} ${t('events:interaction.error_execution')}`, flags: MessageFlags.Ephemeral });
+            }, async () => {
+                try {
+                    await command.execute(bot, interaction, funcs, settings, logger, t);
+                    await interactionHandlers.handleNonCommandInteractions(bot, interaction, userId, users, alertCooldowns);
+                } catch (error) {
+                    logger.error(error);
+                    if (interaction.deferred) {
+                        await interaction.editReply({ content: `${e.pixel_warning} ${t('events:interaction.error_execution')}`, flags: MessageFlags.Ephemeral });
+                    } else if (interaction.replied) {
+                        await interaction.followUp({ content: `${e.pixel_warning} ${t('events:interaction.error_execution')}`, flags: MessageFlags.Ephemeral });
+                    } else {
+                        await interaction.reply({ content: `${e.pixel_warning} ${t('events:interaction.error_execution')}`, flags: MessageFlags.Ephemeral });
+                    }
                 }
-            } finally {
-                logger.clearContext();
-            }
+            });
         } else if (interaction.isButton()) {
             const btnExpiration = buttonCooldowns.get(userId);
             if (btnExpiration && Date.now() < btnExpiration) {

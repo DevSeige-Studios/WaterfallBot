@@ -11,8 +11,9 @@ module.exports = {
         .setDescriptionLocalizations(commandMeta.color.description)
         .addStringOption(o =>
             o.setName("color")
+                .setNameLocalizations(commandMeta.color.option_color_name || {})
                 .setDescription("Hex color code (e.g., FF0000 or #FF0000)")
-                .setDescriptionLocalizations(commandMeta.color.option_color)
+                .setDescriptionLocalizations(commandMeta.color.option_color_description || {})
                 .setRequired(true)
                 .setMaxLength(7)
         ),

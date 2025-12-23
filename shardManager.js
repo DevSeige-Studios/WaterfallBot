@@ -32,8 +32,6 @@ manager.on("shardCreate", shard => {
     shard.on("exit", code => {
         if (!isShuttingDown) {
             logger.fatal(`Shard ${shard.id} EXITED with code ${code}`);
-            logger.warn("Respawning shard...");
-            manager.spawn({ amount: totalShards, delay: 5000 });
         }
     });
 });

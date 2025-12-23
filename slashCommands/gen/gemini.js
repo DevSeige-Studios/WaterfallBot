@@ -40,7 +40,12 @@ module.exports = {
         .setDescription('Ask Google Gemini (AI) a question')
         .setDescriptionLocalizations(commandMeta.gemini.description)
         .addStringOption(opt =>
-            opt.setName('prompt').setDescription('Your question or prompt for Gemini AI').setDescriptionLocalizations(commandMeta.gemini.option_prompt).setRequired(true).setMaxLength(500)
+            opt.setName('prompt')
+                .setNameLocalizations(commandMeta.gemini.option_prompt_name || {})
+                .setDescription('Your question or prompt for Gemini AI')
+                .setDescriptionLocalizations(commandMeta.gemini.option_prompt_description || {})
+                .setRequired(true)
+                .setMaxLength(500)
         ),
     integration_types: [0, 1],
     contexts: [0, 1, 2],

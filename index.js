@@ -403,8 +403,14 @@ bot.once(Events.ClientReady, async () => {
     }
 
     updateShardMetrics();
-    setInterval(updateShardMetrics, 30 * 1000);
+    setInterval(updateShardMetrics, 60 * 1000);
     analyticsWorker.init(bot, settings);
+
+    const { cleanupPendingDeletions } = require("./util/dataCleanup.js");
+    cleanupPendingDeletions().catch(e => logger.error("Startup cleanup failed:", e));
+
+    const inviteTracker = require("./util/inviteTracker.js");
+    bot.guilds.cache.forEach(guild => inviteTracker.cacheInvites(guild));
 });
 
 bot.on("error", e => logger.error("Discord Error", e));
@@ -511,11 +517,7 @@ function analyzeGitHubChanges(changedFiles) {
         "slashCommands/",
         "contextCommands/",
         "events/",
-        "util/functions.js",
         "views/",
-        "schemas/",
-        "hourlyWorker.js",
-        "dailyWorker.js",
         "locales/"
     ];
 
@@ -524,13 +526,23 @@ function analyzeGitHubChanges(changedFiles) {
         "mongoose.js",
         "shardManager.js",
         "data/",
-        "util/interactionHandlers.js"
+        "util/interactionHandlers.js",
+        "util/functions.js",
+        "util/modLog.js",
+        "util/statsGraphRenderer.js",
+        "util/connect4_ai.js",
+        "util/rps_ai.js",
+        "util/inviteTracker.js",
+        "schemas/",
+        "hourlyWorker.js",
+        "dailyWorker.js"
     ];
 
     const containerRestartRequired = [
         "bot.js",
         "github.sh",
-        "logger.js"
+        "logger.js",
+        "package.json"
     ];
 
     const result = {

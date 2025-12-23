@@ -7,6 +7,7 @@ const Canvas = require('canvas');
 const GIFEncoder = require('gifencoder');
 
 const activeGames = new Map();
+const userToGame = new Map();
 const GAME_TIMEOUT_MS = 15 * 60 * 1000;
 
 const { EMPTY, HUMAN, AI, ROWS, COLS } = connect4AI;
@@ -50,35 +51,70 @@ setInterval(() => {
     const now = Date.now();
     for (const [gameId, game] of activeGames.entries()) {
         if (now - game.lastInteraction > GAME_TIMEOUT_MS) {
+            userToGame.delete(game.challengerId);
+            if (game.opponentId) userToGame.delete(game.opponentId);
             activeGames.delete(gameId);
         }
     }
 }, 60000);
 
 function isUserInGame(userId) {
-    for (const [gameId, game] of activeGames.entries()) {
-        if (game.accepted && (game.challengerId === userId || game.opponentId === userId)) {
-            return gameId;
+    const gameId = userToGame.get(userId);
+    if (!gameId) return null;
+    if (!activeGames.has(gameId)) {
+        userToGame.delete(userId);
+        return null;
+    }
+    return gameId;
+}
+
+function removeGame(gameId) {
+    const game = activeGames.get(gameId);
+    if (game) {
+        userToGame.delete(game.challengerId);
+        if (game.opponentId) userToGame.delete(game.opponentId);
+    } else {
+        const parts = gameId.split('_');
+        if (parts[0] === 'ai') {
+            userToGame.delete(parts[1]);
+        } else {
+            userToGame.delete(parts[0]);
+            userToGame.delete(parts[1]);
         }
     }
-    return null;
+    activeGames.delete(gameId);
 }
 
 async function renderBoard(board, colors, lastMove = null) {
-    //lastMove { col: number, row: number, player: number}
     if (lastMove) {
         return renderAnimatedBoard(board, colors, lastMove);
     }
 
     const canvas = Canvas.createCanvas(BOARD_WIDTH, BOARD_HEIGHT);
     const ctx = canvas.getContext('2d');
-
-    drawStaticBoard(ctx, board, colors);
-
+    drawFullBoard(ctx, board, colors);
     return canvas.toBuffer();
 }
 
-function drawStaticBoard(ctx, board, colors, winningCoords = []) {
+function drawFullBoard(ctx, board, colors, winningCoords = []) {
+    drawBoardBackground(ctx);
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const x = PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+            const y = COL_NUM_HEIGHT + PADDING + r * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+            const cell = board[r][c];
+            const isWinning = winningCoords.some(coord => coord.r === r && coord.c === c);
+
+            if (cell === EMPTY) {
+                drawHole(ctx, x, y);
+            } else {
+                drawPiece(ctx, x, y, cell === PLAYER_1 ? colors.p1.hex : colors.p2.hex, isWinning);
+            }
+        }
+    }
+}
+
+function drawBoardBackground(ctx) {
     const boardGrad = ctx.createLinearGradient(0, 0, 0, BOARD_HEIGHT);
     boardGrad.addColorStop(0, '#0066cc');
     boardGrad.addColorStop(1, '#004488');
@@ -93,33 +129,21 @@ function drawStaticBoard(ctx, board, colors, winningCoords = []) {
         const x = PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
         ctx.fillText(`${c + 1}`, x, COL_NUM_HEIGHT / 2);
     }
+}
 
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const x = PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
-            const y = COL_NUM_HEIGHT + PADDING + r * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+function drawHole(ctx, x, y) {
+    const holeGrad = ctx.createRadialGradient(x, y, 0, x, y, BALL_RADIUS);
+    holeGrad.addColorStop(0, '#111');
+    holeGrad.addColorStop(0.8, '#222');
+    holeGrad.addColorStop(1, '#000');
+    ctx.fillStyle = holeGrad;
+    ctx.beginPath();
+    ctx.arc(x, y, BALL_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
 
-            const cell = board[r][c];
-            const isWinning = winningCoords.some(coord => coord.r === r && coord.c === c);
-
-            if (cell === EMPTY) {
-                const holeGrad = ctx.createRadialGradient(x, y, 0, x, y, BALL_RADIUS);
-                holeGrad.addColorStop(0, '#111');
-                holeGrad.addColorStop(0.8, '#222');
-                holeGrad.addColorStop(1, '#000');
-                ctx.fillStyle = holeGrad;
-                ctx.beginPath();
-                ctx.arc(x, y, BALL_RADIUS, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            } else {
-                drawPiece(ctx, x, y, cell === PLAYER_1 ? colors.p1.hex : colors.p2.hex, isWinning);
-            }
-        }
-    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
 }
 
 function drawPiece(ctx, x, y, color, isWinning = false) {
@@ -154,13 +178,19 @@ function drawPiece(ctx, x, y, color, isWinning = false) {
     ctx.shadowBlur = 0;
 }
 
+const darkenedColorCache = new Map();
 function darkenColor(hex, percent) {
+    const key = `${hex}_${percent}`;
+    if (darkenedColorCache.has(key)) return darkenedColorCache.get(key);
+
     const num = parseInt(hex.replace('#', ''), 16),
         amt = Math.round(2.55 * percent),
         R = (num >> 16) - amt,
         G = (num >> 8 & 0x00FF) - amt,
         B = (num & 0x0000FF) - amt;
-    return "#" + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
+    const result = "#" + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
+    darkenedColorCache.set(key, result);
+    return result;
 }
 
 async function renderAnimatedBoard(board, colors, lastMove) {
@@ -168,10 +198,6 @@ async function renderAnimatedBoard(board, colors, lastMove) {
         const encoder = new GIFEncoder(BOARD_WIDTH, BOARD_HEIGHT);
         const stream = encoder.createReadStream();
         encoder.start();
-
-        const isWinMove = connect4AI.checkWin(board, lastMove.player);
-        const winningCoords = isWinMove ? connect4AI.getWinningCoords(board, lastMove.player) : [];
-
         encoder.setRepeat(-1);
         encoder.setDelay(45);
         encoder.setQuality(19);
@@ -184,13 +210,16 @@ async function renderAnimatedBoard(board, colors, lastMove) {
         const canvas = Canvas.createCanvas(BOARD_WIDTH, BOARD_HEIGHT);
         const ctx = canvas.getContext('2d');
 
+        const staticCanvas = Canvas.createCanvas(BOARD_WIDTH, BOARD_HEIGHT);
+        const staticCtx = staticCanvas.getContext('2d');
         const prevBoard = connect4AI.createBoard();
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
-                prevBoard[r][c] = board[r][c];
+                if (r === lastMove.row && c === lastMove.col) prevBoard[r][c] = EMPTY;
+                else prevBoard[r][c] = board[r][c];
             }
         }
-        prevBoard[lastMove.row][lastMove.col] = EMPTY;
+        drawFullBoard(staticCtx, prevBoard, colors);
 
         const endY = COL_NUM_HEIGHT + PADDING + lastMove.row * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
         const x = PADDING + lastMove.col * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
@@ -200,32 +229,33 @@ async function renderAnimatedBoard(board, colors, lastMove) {
         while (currentY < endY) {
             currentY += speed;
             if (currentY > endY) currentY = endY;
-            drawStaticBoard(ctx, prevBoard, colors);
+
+            ctx.drawImage(staticCanvas, 0, 0);
             drawPiece(ctx, x, currentY, lastMove.player === PLAYER_1 ? colors.p1.hex : colors.p2.hex);
             encoder.addFrame(ctx);
             if (currentY === endY) break;
         }
 
+        const isWinMove = connect4AI.checkWin(board, lastMove.player);
         if (isWinMove) {
+            const winningCoords = connect4AI.getWinningCoords(board, lastMove.player);
             for (let i = 0; i < 8; i++) {
                 const shakeX = (Math.random() - 0.5) * 10;
                 const shakeY = (Math.random() - 0.5) * 10;
 
                 ctx.save();
                 ctx.translate(shakeX, shakeY);
-                drawStaticBoard(ctx, board, colors, winningCoords);
-
+                drawFullBoard(ctx, board, colors, winningCoords);
                 drawFlames(ctx, x, endY, i);
-
                 encoder.addFrame(ctx);
                 ctx.restore();
             }
             for (let i = 0; i < 5; i++) {
-                drawStaticBoard(ctx, board, colors, winningCoords);
+                drawFullBoard(ctx, board, colors, winningCoords);
                 encoder.addFrame(ctx);
             }
         } else {
-            drawStaticBoard(ctx, board, colors);
+            drawFullBoard(ctx, board, colors);
             encoder.addFrame(ctx);
         }
 
@@ -286,12 +316,14 @@ function buildForfeitButton(gameId, t, disabled = false) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('connect4')
+        .setNameLocalizations(commandMeta.connect4?.name || {})
         .setDescription('Play Connect 4 against Waterfall or a friend')
         .setDescriptionLocalizations(commandMeta.connect4?.description || {})
         .addUserOption(opt =>
             opt.setName('opponent')
+                .setNameLocalizations(commandMeta.connect4?.option_opponent_name || {})
                 .setDescription('Challenge another player (optional)')
-                .setDescriptionLocalizations(commandMeta.connect4?.option_opponent || {})
+                .setDescriptionLocalizations(commandMeta.connect4?.option_opponent_description || {})
                 .setRequired(false)
         ),
     integration_types: [0, 1],
@@ -306,10 +338,41 @@ module.exports = {
             const opponent = interaction.options.getUser('opponent');
             const userId = interaction.user.id;
 
-            if (isUserInGame(userId)) {
+            const existingGameId = isUserInGame(userId);
+            if (existingGameId) {
+                const game = activeGames.get(existingGameId);
+                let messageExists = false;
+
+                if (game && game.interaction) {
+                    try {
+                        await game.interaction.fetchReply();
+                        messageExists = true;
+                    } catch (err) {
+                        messageExists = false;
+                    }
+                }
+
+                const container = new ContainerBuilder().setAccentColor(0xED4245);
+
+                if (messageExists) {
+                    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${e.pixel_cross} ${t('common:games.already_in_game')}`));
+                } else {
+                    container.addSectionComponents(
+                        new SectionBuilder()
+                            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${e.pixel_cross} ${t('common:games.already_in_game')}`))
+                            .setButtonAccessory(
+                                new ButtonBuilder()
+                                    .setCustomId(`c4_forfeit_${existingGameId}`)
+                                    .setLabel(t('common:games.forfeit'))
+                                    .setStyle(ButtonStyle.Danger)
+                                    .setEmoji('🏳️')
+                            )
+                    );
+                }
+
                 return interaction.reply({
-                    content: `${e.pixel_cross} ${t('common:games.already_in_game')}`,
-                    flags: MessageFlags.Ephemeral
+                    components: [container],
+                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
                 });
             }
 
@@ -374,12 +437,17 @@ module.exports = {
                     accepted: false,
                     messageId: reply.id,
                     channelId: interaction.channelId,
+                    interaction: interaction,
                     colors: colors
                 });
+                userToGame.set(userId, gameId);
+                userToGame.set(opponent.id, gameId);
 
                 setTimeout(async () => {
                     const g = activeGames.get(gameId);
                     if (g && !g.accepted) {
+                        userToGame.delete(g.challengerId);
+                        if (g.opponentId) userToGame.delete(g.opponentId);
                         activeGames.delete(gameId);
                         try {
                             const expiredContainer = new ContainerBuilder()
@@ -424,9 +492,11 @@ module.exports = {
                 turn: turn,
                 lastInteraction: Date.now(),
                 accepted: true,
+                interaction: interaction,
                 lastInfo: { attachmentName: attachName },
                 colors: colors
             });
+            userToGame.set(userId, gameId);
 
             const game = activeGames.get(gameId);
 
@@ -448,7 +518,7 @@ module.exports = {
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(t('common:games.turn_yours')))
                 .addActionRowComponents(buildGameComponents(gameId, t, board));
 
-            await interaction.editReply({
+            const reply = await interaction.editReply({
                 components: [container],
                 files: [attachment],
                 flags: MessageFlags.IsComponentsV2
@@ -526,7 +596,7 @@ module.exports = {
             if (userId !== game.opponentId && userId !== game.challengerId) {
                 return interaction.reply({ content: `${e.deny} ${t('common:pagination.not_for_you')}`, flags: MessageFlags.Ephemeral });
             }
-            activeGames.delete(gameId);
+            removeGame(gameId);
 
             const container = new ContainerBuilder()
                 .setAccentColor(0xED4245)
@@ -540,7 +610,7 @@ module.exports = {
                 return interaction.reply({ content: `${e.deny} ${t('common:pagination.not_for_you')}`, flags: MessageFlags.Ephemeral });
             }
 
-            activeGames.delete(gameId);
+            removeGame(gameId);
 
             const winnerId = userId === game.challengerId ? game.opponentId : game.challengerId;
             const winMsg = game.type === 'PVE'
@@ -581,7 +651,7 @@ module.exports = {
             }
 
             if (winner) {
-                activeGames.delete(gameId);
+                removeGame(gameId);
                 if (game.type === 'PVE') {
                     if (winner !== 'tie') {
                         const isAiWin = (winner !== game.userSide);
@@ -676,7 +746,7 @@ module.exports = {
                 }
 
                 if (aiWinner) {
-                    activeGames.delete(gameId);
+                    removeGame(gameId);
                     if (aiWinner !== 'tie') connect4AI.recordGameResult(AI);
 
                     const aiBuffer = await renderBoard(game.board, game.colors, aiMove);

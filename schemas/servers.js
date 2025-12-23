@@ -26,10 +26,16 @@ const serverSchema = mongoose.Schema({
             ['3', { action: 'timeout', duration: 86400000 }],     // 1 day
             ['5', { action: 'timeout', duration: 604800000 }]     // 1 week
         ])
-    }
+    },
+    serverStats: {
+        enabled: { type: Boolean, default: false },
+        excludedChannels: [String]
+    },
+    pendingDeletion: { type: Date, default: null }
 }, { versionKey: false });
 
 serverSchema.index({ banned: 1 });
+serverSchema.index({ pendingDeletion: 1 });
 
 module.exports = {
     Server: mongoose.model("servers", serverSchema)

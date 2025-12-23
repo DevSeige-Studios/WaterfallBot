@@ -108,6 +108,8 @@ module.exports = {
   icon_ecosia: "<:ecosia:1450112202232041644>",
   icon_swisscows: "<:swisscows:1450112197308055765>",
   icon_qwant: "<:qwant:1450112193306820680>",
+  icon_wikipedia: "",
+  icon_stackoverflow: "",
   // BADGES
   discord_app1: "<:i:1439628209908879390>",
   discord_app2: "<:i:1439628198668271819>",
