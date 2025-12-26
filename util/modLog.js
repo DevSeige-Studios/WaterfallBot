@@ -4,6 +4,7 @@ const { Server } = require('../schemas/servers.js');
 const logger = require('../logger.js');
 const { i18n } = require('../util/i18n.js');
 const { settings } = require('../util/settingsModule.js');
+const funcs = require("../util/functions.js");
 
 const WE = {
     add: "<:add:1442938199524769902>",
@@ -57,7 +58,8 @@ const EVENT_TO_LOG_GROUP = {
     'channelHierarchyUpdate': 'channels',
     'roleHierarchyUpdate': 'roles',
     'threadDelete': 'channels',
-    'threadUpdate': 'channels'
+    'threadUpdate': 'channels',
+    'warnConfigUpdate': 'moderation'
 };
 
 const PRIORITY = {
@@ -98,7 +100,8 @@ const EVENT_PRIORITY = {
     'emojiDelete': PRIORITY.LOW,
     'stickerCreate': PRIORITY.LOW,
     'stickerUpdate': PRIORITY.LOW,
-    'stickerDelete': PRIORITY.LOW
+    'stickerDelete': PRIORITY.LOW,
+    'warnConfigUpdate': PRIORITY.MEDIUM
 };
 
 const BATCHABLE_EVENTS = [
@@ -616,7 +619,7 @@ async function flushQueue(guildId, webhookKey) {
         if (queueData.queue.length > 0 && !queueData.batchTimeout) {
             queueData.batchTimeout = setTimeout(() => {
                 flushQueue(guildId, webhookKey);
-            }, (logEntry.eventType === 'messageDelete' ? QUEUE_CONFIG.BATCH_WINDOW_MS_MSG : QUEUE_CONFIG.BATCH_WINDOW_MS));
+            }, (queueData.queue[0]?.eventType === 'messageDelete' ? QUEUE_CONFIG.BATCH_WINDOW_MS_MSG : QUEUE_CONFIG.BATCH_WINDOW_MS));
         }
     }
 }
@@ -1023,23 +1026,47 @@ async function logAction(bot, guildId, data) {
 }
 
 async function logEvent(bot, guildId, eventType, data, providedDedupKey) {
+    const TEST_SERVER_IDS = ['1440117235401363508', '1005773483093012521'];
+    const isCanary = process.env.CANARY === 'true' || process.env.CANARY === true;
+
+    if (isCanary) {
+        if (!TEST_SERVER_IDS.includes(guildId)) return;
+    } else {
+        if (TEST_SERVER_IDS.includes(guildId)) return;
+    }
+
     if (settings.debug === 'true' || settings.debug === true) {
         logger.debug(`[ModLog] Event Triggered: ${eventType} for guild ${guildId} with dedupKey: ${providedDedupKey}`);
     }
     try {
         const server = await Server.findOne({ serverID: guildId }).lean();
-        if (!server || !server.logs) return;
+        if (!server || !server.logs) {
+            if (settings.debug === 'true') logger.debug(`[ModLog] server or server.logs missing for ${guildId}`);
+            return;
+        }
 
         const t = i18n.getFixedT(server.language || 'en');
 
         const logGroup = EVENT_TO_LOG_GROUP[eventType];
-        if (!logGroup) return;
+        if (!logGroup) {
+            if (settings.debug === 'true') logger.debug(`[ModLog] No logGroup for event ${eventType}`);
+            return;
+        }
 
         const logConfig = server.logs[logGroup];
-        if (!logConfig?.webhook || logConfig.webhook.length !== 2) return;
+        if (!logConfig?.webhook || logConfig.webhook.length !== 2) {
+            if (settings.debug === 'true') logger.debug(`[ModLog] No webhook config for ${logGroup} in ${guildId}`);
+            return;
+        }
 
-        if (server.logs.ignoreBots && data.message?.author?.bot) return;
-        if (server.logs.ignoreBots && data.newMessage?.author?.bot) return;
+        if (server.logs.ignoreBots && data.message?.author?.bot) {
+            if (settings.debug === 'true') logger.debug(`[ModLog] Ignoring bot message for ${guildId}`);
+            return;
+        }
+        if (server.logs.ignoreBots && data.newMessage?.author?.bot) {
+            if (settings.debug === 'true') logger.debug(`[ModLog] Ignoring bot edit for ${guildId}`);
+            return;
+        }
 
         const webhookClient = new WebhookClient({ id: logConfig.webhook[0], token: logConfig.webhook[1] });
         const webhookKey = `${logGroup}:${logConfig.webhook[0]}`;
@@ -1079,6 +1106,7 @@ async function logEvent(bot, guildId, eventType, data, providedDedupKey) {
                 break;
             case 'memberKick':
                 result = { embed: buildMemberKickEmbed(data, bot, t) };
+                dedupKey = `kick:${data.user.id}:${data.reason || 'noreason'}`;
                 break;
             case 'memberTimeout':
                 result = { embed: buildMemberTimeoutEmbed(data, bot, t) };
@@ -1152,11 +1180,17 @@ async function logEvent(bot, guildId, eventType, data, providedDedupKey) {
             case 'threadUpdate':
                 result = { embed: buildThreadUpdateEmbed(data, t) };
                 break;
+            case 'warnConfigUpdate':
+                result = { embed: buildWarnConfigUpdateEmbed(data, bot, t) };
+                break;
             default:
                 return;
         }
 
-        if (!result || (!result.embed && !result.embeds)) return;
+        if (!result || (!result.embed && !result.embeds)) {
+            if (settings.debug === 'true') logger.debug(`[ModLog] No embed result built for ${eventType} in ${guildId}`);
+            return;
+        }
 
         const embedsToSend = result.embeds || [result.embed];
         const filesToSend = result.files || [];
@@ -1497,7 +1531,7 @@ function reconstructEmbed(msgEmbed) {
 }
 
 function buildMemberJoinEmbed(data, bot, t) {
-    const { member } = data;
+    const { member, inviteData } = data;
 
     const embed = new EmbedBuilder()
         .setColor(0x6BCF7F)
@@ -1511,11 +1545,62 @@ function buildMemberJoinEmbed(data, bot, t) {
         { name: t('modlog:account_created'), value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
     );
 
+    if (inviteData) {
+        if (inviteData.inviterId) {
+            embed.addFields({
+                name: t('modlog:invited_by'),
+                value: `<@${inviteData.inviterId}> (${inviteData.uses} ${t('modlog:invites')})`,
+                inline: true
+            });
+        } else if (inviteData.inviterTag === 'Vanity URL') {
+            embed.addFields({
+                name: t('modlog:invited_by'),
+                value: `Vanity URL (\`/${inviteData.code}\`)`,
+                inline: true
+            });
+        }
+    }
+
+    return embed;
+}
+
+function buildWarnConfigUpdateEmbed(data, bot, t) {
+    const { threshold, oldAction, oldDuration, newAction, newDuration, moderator } = data;
+
+    const embed = new EmbedBuilder()
+        .setColor(0xFFA502)
+        .setTitle(`${WE.settings} ${t('modlog:warn_config_updated')}`)
+        .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
+        .setTimestamp();
+
+    if (moderator) {
+        embed.setAuthor({
+            name: moderator.tag,
+            iconURL: moderator.displayAvatarURL()
+        });
+        embed.addFields({ name: t('modlog:moderator'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    }
+
+    embed.addFields({ name: t('modlog:threshold'), value: `${threshold} ${t('modlog:warn_count')}`, inline: true });
+
+    const formatAct = (action, duration) => {
+        if (action === 'none') return t('modlog:none');
+        if (action === 'kick') return t('modlog:action_kick');
+        if (action === 'ban') return t('modlog:action_ban');
+        if (action === 'timeout') return `${t('modlog:action_timeout')}: ${funcs.formatDuration(duration)}`;
+        return action;
+    };
+
+    embed.addFields(
+        { name: t('modlog:old_action'), value: formatAct(oldAction, oldDuration), inline: true },
+        { name: t('modlog:new_action'), value: formatAct(newAction, newDuration), inline: true }
+    );
+
     return embed;
 }
 
 function buildMemberLeaveEmbed(data, bot, t) {
-    const { member, user } = data;
+    const { member, user, inviteData } = data;
     const targetUser = member?.user || user;
 
     const embed = new EmbedBuilder()
@@ -1531,13 +1616,23 @@ function buildMemberLeaveEmbed(data, bot, t) {
         embed.addFields({ name: t('modlog:joined'), value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true });
     }
 
+    if (inviteData) {
+        if (inviteData.inviterId) {
+            embed.addFields({
+                name: t('modlog:was_invited_by'),
+                value: `<@${inviteData.inviterId}>`,
+                inline: true
+            });
+        }
+    }
+
     if (member?.roles?.cache) {
         const roles = member.roles.cache
             .filter(role => role.id !== member.guild.id)
             .map(role => role.name)
             .join(', ');
         if (roles) {
-            embed.addFields({ name: t('modlog:roles'), value: roles.substring(0, 1024) });
+            embed.addFields({ name: t('modlog:roles'), value: funcs.truncate(roles) });
         }
     }
 
@@ -1911,24 +2006,48 @@ function buildInviteCreateEmbed(data, t) {
     const embed = new EmbedBuilder()
         .setColor(0x6BCF7F)
         .setTitle(`${WE.invite} ${t('modlog:invite_created')}`)
-        .setFooter({ text: "Waterfall", iconURL: invite.inviter?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:code'), value: invite.code, inline: true });
-    embed.addFields({ name: t('modlog:channel'), value: `<#${invite.channel.id}>`, inline: true });
+    if (invite.inviter) {
+        embed.setThumbnail(invite.inviter.displayAvatarURL());
+        embed.setFooter({ text: "Waterfall", iconURL: invite.inviter.displayAvatarURL() });
+    } else {
+        embed.setFooter({ text: "Waterfall" });
+    }
+
+    embed.addFields(
+        { name: t('modlog:code'), value: `\`${invite.code}\``, inline: true },
+        { name: t('modlog:channel'), value: `<#${invite.channel.id}>`, inline: true }
+    );
 
     if (invite.inviter) {
-        embed.addFields({ name: t('modlog:created_by'), value: `${invite.inviter.tag} (${invite.inviter.id})`, inline: true });
+        embed.addFields({ name: t('modlog:created_by'), value: `<@${invite.inviter.id}> (${invite.inviter.tag})`, inline: true });
+    }
+
+    if (invite.createdTimestamp) {
+        embed.addFields({ name: t('modlog:created_at'), value: `<t:${Math.floor(invite.createdTimestamp / 1000)}:R>`, inline: true });
     }
 
     if (invite.maxAge > 0) {
-        embed.addFields({ name: t('modlog:expires'), value: `<t:${Math.floor((Date.now() + invite.maxAge * 1000) / 1000)}:R>`, inline: true });
+        const expiresAt = Math.floor((invite.createdTimestamp + invite.maxAge * 1000) / 1000);
+        embed.addFields({ name: t('modlog:expires'), value: `<t:${expiresAt}:R>`, inline: true });
     } else {
         embed.addFields({ name: t('modlog:expires'), value: t('modlog:never'), inline: true });
     }
 
     if (invite.maxUses > 0) {
         embed.addFields({ name: t('modlog:max_uses'), value: `${invite.maxUses}`, inline: true });
+    } else {
+        embed.addFields({ name: t('modlog:max_uses'), value: '∞', inline: true });
+    }
+
+    if (invite.temporary) {
+        embed.addFields({ name: t('modlog:temporary'), value: t('modlog:yes'), inline: true });
+    }
+
+    if (invite.targetType) {
+        const targetTypes = { 1: 'Stream', 2: 'Embedded Application' };
+        embed.addFields({ name: t('modlog:target_type'), value: targetTypes[invite.targetType] || 'Unknown', inline: true });
     }
 
     return embed;
@@ -1940,10 +2059,22 @@ function buildInviteDeleteEmbed(data, t) {
     const embed = new EmbedBuilder()
         .setColor(0xFF6B6B)
         .setTitle(`${WE.trash} ${t('modlog:invite_deleted')}`)
+        .setFooter({ text: "Waterfall" })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:code'), value: invite.code, inline: true });
-    embed.addFields({ name: t('modlog:channel'), value: `<#${invite.channel.id}>`, inline: true });
+    embed.addFields(
+        { name: t('modlog:code'), value: `\`${invite.code}\``, inline: true },
+        { name: t('modlog:channel'), value: `<#${invite.channel?.id}>`, inline: true }
+    );
+
+    if (invite.inviter) {
+        embed.setThumbnail(invite.inviter.displayAvatarURL());
+        embed.addFields({ name: t('modlog:created_by'), value: `<@${invite.inviter.id}>`, inline: true });
+    }
+
+    if (typeof invite.uses === 'number') {
+        embed.addFields({ name: t('modlog:uses'), value: `${invite.uses}`, inline: true });
+    }
 
     return embed;
 }

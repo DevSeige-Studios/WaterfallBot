@@ -10,6 +10,9 @@ module.exports = {
             await modLog.logEvent(bot, invite.guild.id, 'inviteCreate', {
                 invite: invite
             });
+
+            const inviteTracker = require('../util/inviteTracker.js');
+            await inviteTracker.cacheInvites(invite.guild);
         } catch (error) {
             if (settings.debug === 'true') {
                 logger.error(`Error logging invite create event: ${error.message}`, error);

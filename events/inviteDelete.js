@@ -10,6 +10,9 @@ module.exports = {
             await modLog.logEvent(bot, invite.guild.id, 'inviteDelete', {
                 invite: invite
             });
+
+            const inviteTracker = require('../util/inviteTracker.js');
+            await inviteTracker.trackDelete(invite.guild, invite.code);
         } catch (error) {
             if (settings.debug === 'true') {
                 logger.error(`Error logging invite delete event: ${error.message}`, error);

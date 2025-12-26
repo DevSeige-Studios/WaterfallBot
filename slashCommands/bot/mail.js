@@ -25,7 +25,12 @@ module.exports = {
         .setDescription('Check your mail')
         .setNameLocalizations(commandMeta.mail.name)
         .setDescriptionLocalizations(commandMeta.mail.description)
-        .addBooleanOption(option => option.setName('private').setDescription('Show mail privately')),
+        .addBooleanOption(option => option
+            .setName('private')
+            .setNameLocalizations(commandMeta.mail.option_private_name || {})
+            .setDescription('Show mail privately')
+            .setDescriptionLocalizations(commandMeta.mail.option_private_description || {})
+        ),
     integration_types: [0, 1],
     contexts: [0, 1, 2],
     dev: false,

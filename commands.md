@@ -1,19 +1,29 @@
 # Waterfall Commands
 
-*Last updated: Sat, 20 Dec 2025 11:19:50 GMT*
+*Last updated: Fri, 26 Dec 2025 11:49:52 GMT*
 
 ## Commands
 
-- 🤖 **Bot** (4)
+- 🤖 **Bot** (5)
 - 💻 **Dev** (9)
 - 🎲 **Games** (2)
-- 🧭 **General** (8)
+- 🧭 **General** (9)
 - 🛡️ **Moderation** (6)
-- ⚙️ **Utility** (4)
+- ⚙️ **Utility** (5)
 
 ---
 
 ## 🤖 Bot
+
+### `/botprofile`
+
+`🧪 Beta`
+
+The profile theme to apply
+
+**Required Permissions:** Administrator
+
+---
 
 ### `/botstats`
 
@@ -200,6 +210,8 @@ Search the web
 - `/search bing` - Search Bing
 - `/search yahoo` - Search Yahoo
 - `/search yandex` - Search Yandex
+- `/search wikipedia` - Search Wikipedia
+- `/search stackoverflow` - Search StackOverflow
 - `/search queries` - Get links to all search engines
 
 ---
@@ -207,6 +219,24 @@ Search the web
 ### `/server`
 
 Get information about the current server
+
+---
+
+### `/serverstats`
+
+`🧪 Beta`
+
+View and manage server statistics
+
+**Subcommands:**
+
+- `/serverstats enable` - Enable server stats tracking (Admin only)
+- `/serverstats disable` - Disable server stats tracking (Admin only)
+- `/serverstats overview` - View server stats overview with message graph
+- `/serverstats activity` - View peak hours and activity patterns
+- `/serverstats voice` - View voice channel activity leaderboard
+- `/serverstats invites` - View invite tracking leaderboard
+- `/serverstats export` - Export server stats
 
 ---
 
@@ -309,6 +339,26 @@ Manage user warnings
 ### `/color`
 
 Get detailed information about a color
+
+---
+
+### `/convert`
+
+Universal conversion tool
+
+**Subcommands:**
+
+- `/convert length` - Convert length / distance
+- `/convert temperature` - Convert temperature
+- `/convert mass` - Convert mass / weight
+- `/convert data` - Convert data / file size
+- `/convert currency` - Convert currencies
+- `/convert time` - Convert time between timezones
+- `/convert unix` - Convert dates to Unix timestamps and vice-versa
+- `/convert area` - Convert area
+- `/convert volume` - Convert volume
+- `/convert power` - Convert power & energy
+- `/convert speed` - Convert speed
 
 ---
 

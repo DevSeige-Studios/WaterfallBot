@@ -9,8 +9,8 @@ module.exports = {
         .setNameLocalizations(commandMeta.suggestion.name)
         .setDescriptionLocalizations(commandMeta.suggestion.description)
         .addStringOption(option => option.setName('type').setDescription('Suggestion Type')
-            .setNameLocalizations(commandMeta.suggestion.option_type_name)
-            .setDescriptionLocalizations(commandMeta.suggestion.option_type_description)
+            .setNameLocalizations(commandMeta.suggestion.option_type_name || {})
+            .setDescriptionLocalizations(commandMeta.suggestion.option_type_description || {})
             .setRequired(true).addChoices(
                 { name: 'Add Command', value: 'addCmd' },
                 { name: 'Update Command', value: 'updateCmd' },
@@ -18,12 +18,12 @@ module.exports = {
                 { name: 'Update Function', value: 'UpdateFunc' },
             ))
         .addStringOption(option => option.setName('description').setDescription('Describe in detail what you want to add/change')
-            .setNameLocalizations(commandMeta.suggestion.option_description_name)
-            .setDescriptionLocalizations(commandMeta.suggestion.option_description_description)
+            .setNameLocalizations(commandMeta.suggestion.option_description_name || {})
+            .setDescriptionLocalizations(commandMeta.suggestion.option_description_description || {})
             .setRequired(true))
         .addAttachmentOption(option => option.setName('image').setDescription('Image about your suggestion')
-            .setNameLocalizations(commandMeta.suggestion.option_image_name)
-            .setDescriptionLocalizations(commandMeta.suggestion.option_image_description)),
+            .setNameLocalizations(commandMeta.suggestion.option_image_name || {})
+            .setDescriptionLocalizations(commandMeta.suggestion.option_image_description || {})),
     integration_types: [0, 1],
     contexts: [0, 1, 2],
     dev: false,

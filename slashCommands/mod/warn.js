@@ -33,14 +33,16 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.warn.add_description)
             .addUserOption(option => option
                 .setName('user')
+                .setNameLocalizations(commandMeta.warn.option_user_name || {})
                 .setDescription('The user to warn')
-                .setDescriptionLocalizations(commandMeta.warn.option_user)
+                .setDescriptionLocalizations(commandMeta.warn.option_user_description || {})
                 .setRequired(true)
             )
             .addStringOption(option => option
                 .setName('reason')
+                .setNameLocalizations(commandMeta.warn.option_reason_name || {})
                 .setDescription('Reason for the warning')
-                .setDescriptionLocalizations(commandMeta.warn.option_reason)
+                .setDescriptionLocalizations(commandMeta.warn.option_reason_description || {})
                 .setRequired(true)
                 .setMaxLength(500)
             )
@@ -52,8 +54,9 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.warn.list_description)
             .addUserOption(option => option
                 .setName('user')
+                .setNameLocalizations(commandMeta.warn.option_user_name || {})
                 .setDescription('The user to check')
-                .setDescriptionLocalizations(commandMeta.warn.option_user)
+                .setDescriptionLocalizations(commandMeta.warn.option_user_description || {})
                 .setRequired(true)
             )
         )
@@ -64,14 +67,16 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.warn.remove_description)
             .addUserOption(option => option
                 .setName('user')
+                .setNameLocalizations(commandMeta.warn.option_user_name || {})
                 .setDescription('The user whose warning to remove')
-                .setDescriptionLocalizations(commandMeta.warn.option_user)
+                .setDescriptionLocalizations(commandMeta.warn.option_user_description || {})
                 .setRequired(true)
             )
             .addStringOption(option => option
                 .setName('warn_id')
+                .setNameLocalizations(commandMeta.warn.option_warn_id_name || {})
                 .setDescription('The ID of the warning to remove')
-                .setDescriptionLocalizations(commandMeta.warn.option_warn_id)
+                .setDescriptionLocalizations(commandMeta.warn.option_warn_id_description || {})
                 .setRequired(true)
                 .setAutocomplete(true)
             )
@@ -83,8 +88,9 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.warn.clear_description)
             .addUserOption(option => option
                 .setName('user')
+                .setNameLocalizations(commandMeta.warn.option_user_name || {})
                 .setDescription('The user whose warnings to clear')
-                .setDescriptionLocalizations(commandMeta.warn.option_user)
+                .setDescriptionLocalizations(commandMeta.warn.option_user_description || {})
                 .setRequired(true)
             )
         )
@@ -95,8 +101,9 @@ module.exports = {
             .setDescriptionLocalizations(commandMeta.warn.config_description)
             .addIntegerOption(option => option
                 .setName('threshold')
+                .setNameLocalizations(commandMeta.warn.option_threshold_name || {})
                 .setDescription('Warning threshold (1-7)')
-                .setDescriptionLocalizations(commandMeta.warn.option_threshold)
+                .setDescriptionLocalizations(commandMeta.warn.option_threshold_description || {})
                 .setRequired(true)
                 .addChoices(
                     { name: '1 warning', value: 1 },
@@ -110,8 +117,9 @@ module.exports = {
             )
             .addStringOption(option => option
                 .setName('action')
+                .setNameLocalizations(commandMeta.warn.option_action_name || {})
                 .setDescription('Action to take at this threshold')
-                .setDescriptionLocalizations(commandMeta.warn.option_action)
+                .setDescriptionLocalizations(commandMeta.warn.option_action_description || {})
                 .setRequired(true)
                 .addChoices(
                     { name: 'None', value: 'none' },
@@ -122,8 +130,9 @@ module.exports = {
             )
             .addIntegerOption(option => option
                 .setName('duration')
+                .setNameLocalizations(commandMeta.warn.option_duration_name || {})
                 .setDescription('Duration for timeout action')
-                .setDescriptionLocalizations(commandMeta.warn.option_duration)
+                .setDescriptionLocalizations(commandMeta.warn.option_duration_description || {})
                 .setRequired(false)
                 .addChoices(
                     { name: '5 minutes', value: 300000 },
@@ -975,6 +984,15 @@ async function handleConfigWarns(bot, interaction, t, logger) {
 
     serverData.markModified('warnThresholds');
     await serverData.save();
+
+    modLog.logEvent(bot, interaction.guildId, 'warnConfigUpdate', {
+        threshold,
+        oldAction: currentConfig.action,
+        oldDuration: currentConfig.duration,
+        newAction,
+        newDuration,
+        moderator: interaction.user
+    });
 
     let actionText = '';
     if (newAction === 'none') {

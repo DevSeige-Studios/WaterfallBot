@@ -96,7 +96,13 @@ async function deployCommands() {
             logger.neon("\x1b[36m%s\x1b[0m", 'Successfully posted commands to discordbotlist.com:', dblResponse.data);
         }
     } catch (error) {
-        logger.error(error);
+        if (error.response) {
+            logger.error(`Error in deployCommands: ${error.message}`);
+            logger.error('Response data:', JSON.stringify(error.response.data, null, 2));
+            logger.error('Response status:', error.response.status);
+        } else {
+            logger.error('Error in deployCommands:', error);
+        }
     }
 }
 

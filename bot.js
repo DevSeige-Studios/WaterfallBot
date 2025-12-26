@@ -89,6 +89,24 @@ function checkEnv() {
     }
 }
 
+function checkVersion() {
+    const pkgPath = path.join(__dirname, "package.json");
+    if (!fs.existsSync(pkgPath) || !fs.existsSync(settingsPath)) return;
+
+    try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+
+        if (settings.version !== pkg.version) {
+            logger.warnAlert(`Version mismatch detected: package.json (${pkg.version}) vs settings.json (${settings.version || "N/A"}). Updating settings.json...`);
+            settings.version = pkg.version;
+            fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4), "utf8");
+        }
+    } catch (err) {
+        logger.error(`Error during version check: ${err.message}`);
+    }
+}
+
 function setupConsole() {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -268,6 +286,7 @@ function formatUptime(seconds) {
 
 async function initialize() {
     checkEnv();
+    checkVersion();
     try {
         await mongoose.init();
         startBot();

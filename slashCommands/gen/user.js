@@ -1,5 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, MessageFlags, Routes, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder } = require('discord.js');
 const e = require("../../data/emoji.js");
+const { Server } = require("../../schemas/servers.js");
+const { ServerStats } = require("../../schemas/serverStats.js");
 
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const FLAG_MASKS = {
@@ -31,7 +33,12 @@ module.exports = {
         .setDescription('Get information about a user')
         .setNameLocalizations(commandMeta.user.name)
         .setDescriptionLocalizations(commandMeta.user.description)
-        .addUserOption(opt => opt.setName('target').setDescription('User to view')),
+        .addUserOption(opt => opt
+            .setName('target')
+            .setNameLocalizations(commandMeta.user.option_target_name || {})
+            .setDescription('User to view')
+            .setDescriptionLocalizations(commandMeta.user.option_target_description || {})
+        ),
     integration_types: [0, 1],
     contexts: [0, 1, 2],
     dev: false,
@@ -81,7 +88,7 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
     let isBoosting = false;
     let member;
     if (interaction.guild) {
-        member = interaction.guild.members.cache.get(target.id) || await interaction.guild.members.fetch(target.id).catch(() => null);
+        member = await interaction.guild.members.fetch({ user: target.id, force: true }).catch(() => null);
         if (member && (member.premiumSince || member.premiumSinceTimestamp)) {
             isBoosting = true;
         }
@@ -102,8 +109,28 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
 
     let title = `${t('commands:user.about', { user: `[${target.displayName}](https://discord.com/users/${target.id})` })}${isBoosting ? ` ${e.blurple_boost}` : `${titleSuffix}`}`;
 
-    if (target.id === bot.user.id) {
+    const waterfallIds = ['1435231722714169435', '1444044444289470484'];
+
+    if (waterfallIds.includes(target.id)) {
         title += `\n-# ${t('commands:user.waterfall_tag')} ${e.verified_check_bw}`;
+
+        if (interaction.guild) {
+            try {
+                const serverConf = await Server.findOne({ serverID: interaction.guild.id }).select('botProfile').lean();
+                if (serverConf && serverConf.botProfile) {
+                    const themeNames = {
+                        default: "Default",
+                        crimson: "Crimson",
+                        azure: "Azure",
+                        azure_glow: "Azure (Glow)"
+                    };
+                    const themeName = themeNames[serverConf.botProfile] || "Default";
+                    title += `\n-# ${t('commands:user.theme', { theme: themeName })}`;
+                } else {
+                    title += `\n-# ${t('commands:user.theme', { theme: "Default" })}`;
+                }
+            } catch (err) { }
+        }
     }
 
     if (botBadges) {
@@ -122,28 +149,39 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         accentColor = user.accent_color;
     }
 
+    const globalAvatar = target.displayAvatarURL({ size: 2048 });
+    const serverAvatar = member && member.avatar ? member.avatarURL({ size: 2048 }) : null;
+    const displayAvatar = serverAvatar || globalAvatar;
+
+    let globalBanner = null;
+    if (user.banner) {
+        globalBanner = `https://cdn.discordapp.com/banners/${user.id}/${user.banner}.${user.banner.startsWith('a_') ? 'gif' : 'png'}?size=2048`;
+    }
+    const serverBanner = member && member.banner ? member.bannerURL({ size: 2048 }) : null;
+    const displayBanner = serverBanner || globalBanner;
+
     const section = new SectionBuilder()
-        .setThumbnailAccessory(new ThumbnailBuilder().setURL(target.displayAvatarURL({ size: 2048 })))
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(displayAvatar))
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(`# ${title}`)
         );
 
     const container = new ContainerBuilder()
-        .setAccentColor(accentColor)
+        .setAccentColor(accentColor);
 
-    if (user.banner && (target.id == bot.user.id)) {
-        const bannerURL = `https://cdn.discordapp.com/banners/${user.id}/${user.banner}.${user.banner.startsWith('a_') ? 'gif' : 'png'}?size=2048`;
+    if (waterfallIds.includes(target.id) && displayBanner) {
         container.addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(bannerURL)
+                new MediaGalleryItemBuilder().setURL(displayBanner)
             )
         );
     }
 
-    container.addSectionComponents(section)
+    container.addSectionComponents(section);
     container.addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
     );
+
     let description = `### ${t('commands:user.username_id')}\n${usernameDisplay} | ${target.id}\n\n### ${t('commands:user.created_date')}\n<t:${Math.floor(target.createdTimestamp / 1000)}:F>`;
 
     let clanTag;
@@ -163,6 +201,33 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         description += `\n\n### ${t('commands:user.joined_date')}\n<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`;
     }
 
+    if (interaction.guild) {
+        try {
+            const serverData = await Server.findOne({ serverID: interaction.guild.id }).lean();
+            if (serverData?.serverStats?.enabled) {
+                const stats = await ServerStats.findOne({ guildId: interaction.guild.id });
+                if (stats) {
+                    const messages = stats.messageStats?.filter(s => s.userId === target.id).reduce((sum, s) => sum + s.count, 0) || 0;
+                    const vcTime = stats.vcSessions?.filter(s => s.userId === target.id).reduce((sum, s) => sum + s.duration, 0) || 0;
+                    const invites = stats.memberJoins?.filter(s => s.inviterId === target.id).length || 0;
+
+                    if (messages > 0 || vcTime > 0 || invites > 0) {
+                        description += `\n\n### ${t('commands:user.activity_stats') || 'Activity (30 days)'}`;
+                        if (messages > 0) description += `\n${e.channel} **${messages.toLocaleString()}** ${t('commands:serverstats.messages').toLowerCase()}`;
+                        if (vcTime > 0) {
+                            const hours = Math.floor(vcTime / 3600);
+                            const mins = Math.floor((vcTime % 3600) / 60);
+                            description += `\n${e.voice_channnel} **${hours}h ${mins}m** ${t('commands:serverstats.voice_time').toLowerCase()}`;
+                        }
+                        if (invites > 0) description += `\n${e.invite} **${invites}** ${t('commands:serverstats.invites').toLowerCase()}`;
+                    }
+                }
+            }
+        } catch (err) {
+            //
+        }
+    }
+
     container.addTextDisplayComponents(
         new TextDisplayBuilder().setContent(description)
     );
@@ -171,29 +236,39 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
     );
 
-    const row = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setLabel(t('commands:user.avatar_link'))
-                .setStyle(ButtonStyle.Link)
-                .setURL(target.displayAvatarURL({ size: 2048 }))
+    if (!waterfallIds.includes(target.id) && displayBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(displayBanner)
+            )
         );
-    let bannerURL;
-    if (user.banner) {
-        bannerURL = `https://cdn.discordapp.com/banners/${user.id}/${user.banner}.${user.banner.startsWith('a_') ? 'gif' : 'png'}?size=2048`;
+    }
 
-        if (target.id != bot.user.id) {
-            container.addMediaGalleryComponents(
-                new MediaGalleryBuilder().addItems(
-                    new MediaGalleryItemBuilder().setURL(bannerURL)
-                )
+    const row = new ActionRowBuilder();
+
+    if (serverAvatar) {
+        row.addComponents(
+            new ButtonBuilder().setLabel(t('commands:user.server_avatar') || "Server Avatar").setStyle(ButtonStyle.Link).setURL(serverAvatar),
+            new ButtonBuilder().setLabel(t('commands:user.default_avatar') || "Default Avatar").setStyle(ButtonStyle.Link).setURL(globalAvatar)
+        );
+    } else {
+        row.addComponents(
+            new ButtonBuilder().setLabel(t('commands:user.avatar_link')).setStyle(ButtonStyle.Link).setURL(globalAvatar)
+        );
+    }
+
+    if (serverBanner) {
+        row.addComponents(
+            new ButtonBuilder().setLabel(t('commands:user.server_banner') || "Server Banner").setStyle(ButtonStyle.Link).setURL(serverBanner)
+        );
+        if (globalBanner) {
+            row.addComponents(
+                new ButtonBuilder().setLabel(t('commands:user.default_banner') || "Default Banner").setStyle(ButtonStyle.Link).setURL(globalBanner)
             );
         }
+    } else if (globalBanner) {
         row.addComponents(
-            new ButtonBuilder()
-                .setLabel(t('commands:user.banner_link'))
-                .setStyle(ButtonStyle.Link)
-                .setURL(bannerURL)
+            new ButtonBuilder().setLabel(t('commands:user.banner_link')).setStyle(ButtonStyle.Link).setURL(globalBanner)
         );
     }
 

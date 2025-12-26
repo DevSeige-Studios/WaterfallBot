@@ -23,8 +23,9 @@ module.exports = {
         .setDescriptionLocalizations(commandMeta.dictionary.description)
         .addStringOption(opt =>
             opt.setName('word')
+                .setNameLocalizations(commandMeta.dictionary.option_word_name || {})
                 .setDescription('The word to define')
-                .setDescriptionLocalizations(commandMeta.dictionary.option_word)
+                .setDescriptionLocalizations(commandMeta.dictionary.option_word_description || {})
                 .setRequired(true)
                 .setMaxLength(100)
         ),

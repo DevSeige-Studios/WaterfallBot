@@ -20,8 +20,8 @@ module.exports = {
         return Math.max(total, 100);
         //return total;
     },
-    abbr: function formatNumber(number) {
-        if (number < 1e8) {
+    abbr: function formatNumber(number, threshold = 1e8) {
+        if (number < threshold) {
             return number.toLocaleString();
         } else {
             return millify(number, { precision: 2, lowercase: true });
@@ -93,5 +93,60 @@ module.exports = {
     },
     sleep: function (ms) {
         return new Promise(res => setTimeout(res, ms));
+    },
+    parseAbbr: function (str) {
+        if (!str || typeof str !== 'string') return 0;
+        const s = str.toLowerCase().replace(/,/g, '').trim();
+        if (!s) return 0;
+
+        const maxCap = 1e50;
+        const suffixes = {
+            'k': 1e3, 'm': 1e6, 'b': 1e9, 't': 1e12, 'q': 1e15,
+            'sx': 1e18, 'sp': 1e21, 'o': 1e24, 'n': 1e27, 'd': 1e30,
+            'h': 1e2
+        };
+
+        const regex = /([0-9.]+)([a-z]*)/g;
+        let total = 0;
+        let match;
+        let hasMatch = false;
+
+        while ((match = regex.exec(s)) !== null) {
+            const val = parseFloat(match[1]);
+            const suffix = match[2];
+            if (!isNaN(val)) {
+                total += val * (suffixes[suffix] || 1);
+                hasMatch = true;
+            }
+        }
+
+        if (!hasMatch) return 0;
+        return Math.min(total, maxCap);
+    },
+    decodeHtmlEntities: function (text) {
+        if (!text) return text;
+        return text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&#x27;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+    },
+    truncate: function (text, max = 1024) {
+        if (!text) return '—';
+        if (text.length <= max) return text;
+        return text.slice(0, max - 3) + '...';
+    },
+    filterString: async function (query) {
+        try {
+            const response = await axios.get('https://www.purgomalum.com/service/json', {
+                params: { text: query, fill_char: '-' }
+            });
+            return response.data.result || '[REDACTED]';
+        } catch {
+            return '[REDACTED]';
+        }
     }
 };

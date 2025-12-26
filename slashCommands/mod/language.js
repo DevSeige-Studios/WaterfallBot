@@ -12,8 +12,9 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
         .addStringOption(option =>
             option.setName("type")
+                .setNameLocalizations(commandMeta.language.option_type_name || {})
                 .setDescription("Language to set")
-                .setDescriptionLocalizations(commandMeta.language.option_type)
+                .setDescriptionLocalizations(commandMeta.language.option_type_description || {})
                 .setRequired(true)
                 .addChoices(
                     { name: "Deutsch", value: "de" },
@@ -24,11 +25,8 @@ module.exports = {
                     { name: "日本語", value: "ja" },
                     { name: "Nederlands", value: "nl" },
                     { name: "Polski", value: "pl" },
-                    { name: "Português", value: "pt" },
                     { name: "Русский", value: "ru" },
-                    { name: "Svenska", value: "sv" },
-                    { name: "Türkçe", value: "tr" },
-                    { name: "中文", value: "zh" }
+                    { name: "Türkçe", value: "tr" }
                 )
         ),
     integration_types: [0],

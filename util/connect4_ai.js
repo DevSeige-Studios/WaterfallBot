@@ -103,6 +103,10 @@ function dropPiece(board, col, piece) {
     return -1;
 }
 
+function undoPiece(board, col, row) {
+    board[row][col] = EMPTY;
+}
+
 function checkWin(board, piece) {
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS - 3; c++) {
@@ -246,9 +250,9 @@ function minimax(board, depth, alpha, beta, maximizingPlayer) {
         let value = -Infinity;
         let column = validMoves[Math.floor(Math.random() * validMoves.length)];
         for (const col of validMoves) {
-            const tempBoard = copyBoard(board);
-            dropPiece(tempBoard, col, AI);
-            const newScore = minimax(tempBoard, depth - 1, alpha, beta, false)[1];
+            const row = dropPiece(board, col, AI);
+            const newScore = minimax(board, depth - 1, alpha, beta, false)[1];
+            undoPiece(board, col, row);
             if (newScore > value) {
                 value = newScore;
                 column = col;
@@ -261,9 +265,9 @@ function minimax(board, depth, alpha, beta, maximizingPlayer) {
         let value = Infinity;
         let column = validMoves[Math.floor(Math.random() * validMoves.length)];
         for (const col of validMoves) {
-            const tempBoard = copyBoard(board);
-            dropPiece(tempBoard, col, HUMAN);
-            const newScore = minimax(tempBoard, depth - 1, alpha, beta, true)[1];
+            const row = dropPiece(board, col, HUMAN);
+            const newScore = minimax(board, depth - 1, alpha, beta, true)[1];
+            undoPiece(board, col, row);
             if (newScore < value) {
                 value = newScore;
                 column = col;

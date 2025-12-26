@@ -11,8 +11,9 @@ module.exports = {
         .setDescriptionLocalizations(commandMeta.role.description)
         .addRoleOption(o =>
             o.setName("target")
+                .setNameLocalizations(commandMeta.role.option_target_name || {})
                 .setDescription("Target Role to check")
-                .setDescriptionLocalizations(commandMeta.role.option_target)
+                .setDescriptionLocalizations(commandMeta.role.option_target_description || {})
                 .setRequired(true)
         ),
     integration_types: [0],
