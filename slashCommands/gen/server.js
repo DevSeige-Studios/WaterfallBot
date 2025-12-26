@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, MessageFlags, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder, ChannelType } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, MessageFlags, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const e = require("../../data/emoji.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const funcs = require("../../util/functions.js");
@@ -93,7 +93,7 @@ module.exports = {
                             const hours = Math.floor(totalVoice / 3600);
                             description += `${e.voice_channnel} ${t('commands:serverstats.voice_time')} (30d): **${hours}h**\n`;
                         }
-                        if (totalInvites > 0) description += `${e.invite} ${t('commands:serverstats.invites')}: **${totalInvites}**\n`;
+                        if (totalInvites > 0 && interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) description += `${e.invite} ${t('commands:serverstats.invites')}: **${totalInvites}**\n`;
                         description += '\n';
                     }
                 }

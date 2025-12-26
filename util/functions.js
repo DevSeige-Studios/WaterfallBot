@@ -138,5 +138,15 @@ module.exports = {
         if (!text) return '—';
         if (text.length <= max) return text;
         return text.slice(0, max - 3) + '...';
+    },
+    filterString: async function (query) {
+        try {
+            const response = await axios.get('https://www.purgomalum.com/service/json', {
+                params: { text: query, fill_char: '-' }
+            });
+            return response.data.result || '[REDACTED]';
+        } catch {
+            return '[REDACTED]';
+        }
     }
 };

@@ -386,7 +386,7 @@ async function handleList(bot, interaction, t, logger) {
         }
 
         const section = new SectionBuilder()
-            .setThumbnailAccessory(new ThumbnailBuilder().setURL(bot.user.displayAvatarURL()))
+            .setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild.iconURL() || bot.user.displayAvatarURL()))
             .addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(`# ${e.config} ${t('commands:logs.list_title')}`),
                 new TextDisplayBuilder().setContent(`-# ${t('commands:logs.list_desc')}`)

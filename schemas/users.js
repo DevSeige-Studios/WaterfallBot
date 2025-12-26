@@ -20,6 +20,10 @@ const userSchema = mongoose.Schema({
         "color": { type: String, default: null },
         "divider": { type: String, default: null },
     },
+    geminiImageUsage: {
+        date: { type: String, default: null },
+        count: { type: Number, default: 0 }
+    },
     banned: { type: Boolean, default: false }
 }, { versionKey: false });
 

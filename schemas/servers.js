@@ -4,6 +4,8 @@ const serverSchema = mongoose.Schema({
     serverID: { type: String, index: true },
     prefix: String,
     language: { type: String, default: "en" },
+    botProfile: { type: String, default: "default" },
+    botProfileLastUpdate: { type: Number, default: 0 },
     banned: { type: Boolean, default: false },
     logs: {
         messages: { channelId: String, webhook: [String] },

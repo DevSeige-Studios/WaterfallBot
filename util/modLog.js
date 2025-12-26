@@ -58,7 +58,8 @@ const EVENT_TO_LOG_GROUP = {
     'channelHierarchyUpdate': 'channels',
     'roleHierarchyUpdate': 'roles',
     'threadDelete': 'channels',
-    'threadUpdate': 'channels'
+    'threadUpdate': 'channels',
+    'warnConfigUpdate': 'moderation'
 };
 
 const PRIORITY = {
@@ -99,7 +100,8 @@ const EVENT_PRIORITY = {
     'emojiDelete': PRIORITY.LOW,
     'stickerCreate': PRIORITY.LOW,
     'stickerUpdate': PRIORITY.LOW,
-    'stickerDelete': PRIORITY.LOW
+    'stickerDelete': PRIORITY.LOW,
+    'warnConfigUpdate': PRIORITY.MEDIUM
 };
 
 const BATCHABLE_EVENTS = [
@@ -1178,6 +1180,9 @@ async function logEvent(bot, guildId, eventType, data, providedDedupKey) {
             case 'threadUpdate':
                 result = { embed: buildThreadUpdateEmbed(data, t) };
                 break;
+            case 'warnConfigUpdate':
+                result = { embed: buildWarnConfigUpdateEmbed(data, bot, t) };
+                break;
             default:
                 return;
         }
@@ -1555,6 +1560,41 @@ function buildMemberJoinEmbed(data, bot, t) {
             });
         }
     }
+
+    return embed;
+}
+
+function buildWarnConfigUpdateEmbed(data, bot, t) {
+    const { threshold, oldAction, oldDuration, newAction, newDuration, moderator } = data;
+
+    const embed = new EmbedBuilder()
+        .setColor(0xFFA502)
+        .setTitle(`${WE.settings} ${t('modlog:warn_config_updated')}`)
+        .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
+        .setTimestamp();
+
+    if (moderator) {
+        embed.setAuthor({
+            name: moderator.tag,
+            iconURL: moderator.displayAvatarURL()
+        });
+        embed.addFields({ name: t('modlog:moderator'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    }
+
+    embed.addFields({ name: t('modlog:threshold'), value: `${threshold} ${t('modlog:warn_count')}`, inline: true });
+
+    const formatAct = (action, duration) => {
+        if (action === 'none') return t('modlog:none');
+        if (action === 'kick') return t('modlog:action_kick');
+        if (action === 'ban') return t('modlog:action_ban');
+        if (action === 'timeout') return `${t('modlog:action_timeout')}: ${funcs.formatDuration(duration)}`;
+        return action;
+    };
+
+    embed.addFields(
+        { name: t('modlog:old_action'), value: formatAct(oldAction, oldDuration), inline: true },
+        { name: t('modlog:new_action'), value: formatAct(newAction, newDuration), inline: true }
+    );
 
     return embed;
 }

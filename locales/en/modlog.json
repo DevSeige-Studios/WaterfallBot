@@ -137,6 +137,7 @@
     "action_triggered": "Action Triggered",
     "action_timeout": "Timeout",
     "action_kick": "Kick",
+    "action_ban": "Ban",
     "warn_removed": "Warn Removed",
     "removed_reason": "Removed Reason",
     "remaining_warns": "Remaining Warns",
@@ -172,5 +173,10 @@
     "created_at": "Created",
     "temporary": "Temporary",
     "target_type": "Target Type",
-    "uses": "Uses"
+    "uses": "Uses",
+    "warn_config_updated": "Warn Configuration Updated",
+    "threshold": "Threshold",
+    "old_action": "Old Action",
+    "new_action": "New Action",
+    "warn_config_update": "Warn Config Updated"
 }

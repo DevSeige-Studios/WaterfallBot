@@ -390,10 +390,8 @@ bot.once(Events.ClientReady, async () => {
         hourlyWorkerJob.start();
         if (shardId == 0) {
             dailyCronJob.start();
-            if (process.env.CANARY !== "true") {
-                analyticsExportJob.start();
-                logger.info("Analytics Export scheduled for the 1st of every month at midnight");
-            }
+            analyticsExportJob.start();
+            logger.info("Analytics Export scheduled for the 1st of every month at midnight")
         }
     }
 
@@ -406,8 +404,10 @@ bot.once(Events.ClientReady, async () => {
     setInterval(updateShardMetrics, 60 * 1000);
     analyticsWorker.init(bot, settings);
 
-    const { cleanupPendingDeletions } = require("./util/dataCleanup.js");
-    cleanupPendingDeletions().catch(e => logger.error("Startup cleanup failed:", e));
+    if (shardId === 0 && process.env.CANARY !== "true") {
+        const { cleanupPendingDeletions } = require("./util/dataCleanup.js");
+        cleanupPendingDeletions().catch(e => logger.error("Startup cleanup failed:", e));
+    }
 
     const inviteTracker = require("./util/inviteTracker.js");
     bot.guilds.cache.forEach(guild => inviteTracker.cacheInvites(guild));

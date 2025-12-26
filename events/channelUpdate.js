@@ -235,7 +235,7 @@ async function flushUpdates(bot, guildId) {
             const parentId = mover.channel.parentId;
             const siblings = Array.from(guild.channels.cache.values())
                 .filter(c => c.parentId === parentId)
-                .sort((a, b) => b.rawPosition - a.rawPosition);
+                .sort((a, b) => a.rawPosition - b.rawPosition);
 
             const moverIndex = siblings.findIndex(c => c.id === mover.id);
             if (moverIndex !== -1) {

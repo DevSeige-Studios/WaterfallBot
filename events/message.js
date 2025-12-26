@@ -50,7 +50,7 @@ module.exports = {
 
         analyticsWorker.trackMessage();
 
-        if (message.guild) {
+        if (message.guild && process.env.CANARY !== 'true') {
             isStatsEnabled(message.guild.id).then(async (enabled) => {
                 if (enabled) {
                     const cached = statsEnabledCache.get(message.guild.id);

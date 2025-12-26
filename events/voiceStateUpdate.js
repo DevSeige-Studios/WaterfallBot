@@ -26,6 +26,8 @@ module.exports = {
         if (!userId) return;
 
         try {
+            if (process.env.CANARY === 'true') return;
+
             const enabled = await isStatsEnabled(guildId);
             if (!enabled) return;
 

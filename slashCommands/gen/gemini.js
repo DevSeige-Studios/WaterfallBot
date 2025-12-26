@@ -3,35 +3,9 @@ const { SlashCommandBuilder, MessageFlags, ContainerBuilder, SectionBuilder, Tex
 const axios = require('axios');
 const gemini_key = process.env.GEMINI_API_KEY;
 const { filterQuery } = require('./search.js');
-const fs = require('fs');
-const path = require('path');
-const USAGE_FILE = path.join(__dirname, '../../gemini_image_usage.json');
+const User = require('../../schemas/users.js');
 const e = require("../../data/emoji.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
-
-function loadImageUsage() {
-    try {
-        if (fs.existsSync(USAGE_FILE)) {
-            return JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8'));
-        }
-    } catch (e) { logger.error('Failed to load gemini_image_usage.json:', e); }
-    return {};
-}
-function saveImageUsage(data) {
-    try {
-        fs.writeFileSync(USAGE_FILE, JSON.stringify(data, null, 2));
-    } catch (e) { logger.error('Failed to save gemini_image_usage.json:', e); }
-}
-let geminiImageUsage = loadImageUsage();
-function incrementImageUsage(userId) {
-    const today = new Date().toISOString().slice(0, 10);
-    if (!geminiImageUsage[userId] || geminiImageUsage[userId].date !== today) {
-        geminiImageUsage[userId] = { date: today, count: 1 };
-    } else {
-        geminiImageUsage[userId].count++;
-    }
-    saveImageUsage(geminiImageUsage);
-}
 //
 module.exports = {
     data: new SlashCommandBuilder()
@@ -57,10 +31,22 @@ module.exports = {
         const prompt = interaction.options.getString('prompt');
         const username = interaction.user.username;
         const today = new Date().toISOString().slice(0, 10);
-        let usageCount = 0;
-        if (geminiImageUsage[interaction.user.id] && geminiImageUsage[interaction.user.id].date === today) {
-            usageCount = geminiImageUsage[interaction.user.id].count;
+        let userData = await User.findOne({ userID: interaction.user.id });
+
+        if (!userData) {
+            userData = await User.create({ userID: interaction.user.id, geminiImageUsage: { date: today, count: 0 } });
         }
+
+        if (userData.geminiImageUsage.date !== today) {
+            await User.updateOne(
+                { userID: interaction.user.id },
+                { $set: { 'geminiImageUsage.date': today, 'geminiImageUsage.count': 0 } }
+            );
+            userData.geminiImageUsage.date = today;
+            userData.geminiImageUsage.count = 0;
+        }
+
+        let usageCount = userData.geminiImageUsage.count;
         let refusalBlock = '';
         if (usageCount >= 3) {
             refusalBlock = '***IMPORTANT: The user has reached their daily image generation limit. You MUST NOT generate or return any inline/base64 image, or any external image pretending to be a generated image, even if the user requests it. You MUST reply with the following message as your answer ONLY IF user asks to CREATE AN IMAGE: "I cannot generate any more images for you today, is there anything else you would like me to do?". Only use the thumbnail image link system for the embed.';
@@ -448,7 +434,12 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                 resultContainer.addActionRowComponents(actionRow);
             }
             await interaction.editReply({ components: [resultContainer], files, flags: MessageFlags.IsComponentsV2 });
-            if (imageData) incrementImageUsage(interaction.user.id);
+            if (imageData) {
+                await User.updateOne(
+                    { userID: interaction.user.id },
+                    { $inc: { 'geminiImageUsage.count': 1 } }
+                );
+            }
         } catch (err) {
             let msg = `${e.pixel_cross} ${t('commands:gemini.error_generic')}`;
             const dev = settings.devs || [];

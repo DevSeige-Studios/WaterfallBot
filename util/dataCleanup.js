@@ -15,7 +15,7 @@ async function cleanupPendingDeletions() {
             return { deleted: 0 };
         }
 
-        logger.info(`[Cleanup] Processing ${expiredServers.length} expired server deletions`);
+        logger.warnAlert(`[Cleanup] Processing ${expiredServers.length} expired server deletions`);
 
         for (const server of expiredServers) {
             try {
@@ -23,7 +23,7 @@ async function cleanupPendingDeletions() {
 
                 await Server.deleteOne({ serverID: server.serverID });
 
-                logger.info(`[Cleanup] Deleted data for guild ${server.serverID}`);
+                logger.warn(`[Cleanup] Deleted data for guild ${server.serverID}`);
             } catch (err) {
                 logger.error(`[Cleanup] Failed to delete data for guild ${server.serverID}: ${err.message}`);
             }
@@ -48,7 +48,7 @@ async function cancelPendingDeletion(guildId) {
             { $unset: { pendingDeletion: '' } }
         );
 
-        logger.info(`[Cleanup] Cancelled pending deletion for guild ${guildId}`);
+        logger.warnAlert(`[Cleanup] Cancelled pending deletion for guild ${guildId}`);
     } catch (error) {
         logger.error(`[Cleanup] Error cancelling deletion for guild ${guildId}: ${error.message}`);
     }

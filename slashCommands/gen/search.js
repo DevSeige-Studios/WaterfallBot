@@ -1343,7 +1343,7 @@ async function handleStackOverflow(interaction, query, page = 1, isPagination = 
     orderedContent.push(`-# **${t('commands:search.stackoverflow.votes')}:** ${funcs.abbr(q.score)} | **${t('commands:search.stackoverflow.answers')}:** ${funcs.abbr(q.answer_count)} | **${t('commands:search.stackoverflow.views')}:** ${funcs.abbr(q.view_count)}`);
     if (q.creation_date) orderedContent.push(`-# **${t('commands:search.stackoverflow.asked')}:** <t:${q.creation_date}:R>`);
     if (q.tags?.length) orderedContent.push(`-# **${t('commands:search.stackoverflow.tags')}:** ${q.tags.slice(0, 5).join(', ')}`);
-    if (q.is_answered) orderedContent.push(`-# ${e.verified_check_bw} ${t('commands:search.stackoverflow.accepted')}`);
+    if (q.is_answered) orderedContent.push(`-# ${e.verified_check_green} ${t('commands:search.stackoverflow.accepted')}`);
     orderedContent.push('');
     const bodyText = q.body?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500) || '';
     if (bodyText) orderedContent.push(funcs.decodeHtmlEntities(bodyText));

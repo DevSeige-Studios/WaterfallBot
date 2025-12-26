@@ -22,6 +22,18 @@ const serverStatsSchema = mongoose.Schema({
         channelId: String,
         joinTime: Date
     }],
+    allTimeVoiceMinutes: { type: Number, default: 0 },
+    dailySnapshots: [{
+        date: Date,
+        messages: Number,
+        voiceMinutes: Number,
+        memberCount: Number,
+    }],
+    exportConfig: {
+        channelId: { type: String, default: null },
+        lastExportAt: { type: Date, default: null },
+        enabled: { type: Boolean, default: false }
+    },
     invites: [{
         code: String,
         inviterId: String,
@@ -44,6 +56,7 @@ serverStatsSchema.index({ guildId: 1, 'memberJoins.joinedAt': -1 });
 
 serverStatsSchema.statics.cleanupOldData = async function (guildId) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
 
     await this.updateOne(
         { guildId },
@@ -51,7 +64,8 @@ serverStatsSchema.statics.cleanupOldData = async function (guildId) {
             $pull: {
                 messageStats: { date: { $lt: thirtyDaysAgo } },
                 vcSessions: { joinTime: { $lt: thirtyDaysAgo } },
-                memberJoins: { joinedAt: { $lt: thirtyDaysAgo } }
+                memberJoins: { joinedAt: { $lt: thirtyDaysAgo } },
+                dailySnapshots: { date: { $lt: sixtyDaysAgo } }
             }
         }
     );
@@ -150,7 +164,8 @@ serverStatsSchema.statics.trackVcLeave = async function (guildId, channelId, use
                         leaveTime: new Date(),
                         duration
                     }
-                }
+                },
+                $inc: { allTimeVoiceMinutes: Math.floor(duration / 60) }
             }
         );
         logger.debug(`[ServerStats] Tracked VC leave for user ${userId} in guild ${guildId}, duration: ${duration}s`);

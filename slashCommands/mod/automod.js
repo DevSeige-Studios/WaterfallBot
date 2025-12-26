@@ -1188,54 +1188,35 @@ async function createPresetRules(interaction, state, t, logger) {
 
             if (preset === 'spam_protection') {
                 const existingSpam = existingRules.find(r => r.triggerType === AutoModerationRuleTriggerType.Spam);
+                const spamConfig = {
+                    name: `w! ${t('commands:automod.setup_rules.spam_protection', { default: 'Spam Protection' })}`,
+                    enabled: true,
+                    eventType: AutoModerationRuleEventType.MessageSend,
+                    triggerType: AutoModerationRuleTriggerType.Spam,
+                    actions: [
+                        {
+                            type: AutoModerationActionType.BlockMessage,
+                            metadata: {
+                                customMessage: t('commands:automod.block_message_default', { default: 'Your message was blocked by the auto-mod system.' })
+                            }
+                        },
+                        ...(alertChannel ? [{
+                            type: AutoModerationActionType.SendAlertMessage,
+                            metadata: { channel: alertChannel }
+                        }] : [])
+                    ]
+                };
 
                 if (existingSpam) {
                     try {
-                        const spamRuleData = {
-                            name: `w! ${t('commands:automod.setup_rules.spam_protection', { default: 'Spam Protection' })}`,
-                            enabled: true,
-                            eventType: AutoModerationRuleEventType.MessageSend,
-                            triggerType: AutoModerationRuleTriggerType.Spam,
-                            actions: [
-                                {
-                                    type: AutoModerationActionType.BlockMessage,
-                                    metadata: {
-                                        customMessage: t('commands:automod.block_message_default', { default: 'Your message was blocked by the auto-mod system.' })
-                                    }
-                                },
-                                ...(alertChannel ? [{
-                                    type: AutoModerationActionType.SendAlertMessage,
-                                    metadata: { channel: alertChannel }
-                                }] : [])
-                            ]
-                        };
-
-                        await existingSpam.edit(spamRuleData);
+                        await existingSpam.edit(spamConfig);
                         createdRules.push(existingSpam.name + " (Updated)");
                     } catch (error) {
                         logger.error(`Failed to update spam rule:`, error);
+                        ruleData = spamConfig;
                     }
-                }
-
-                if (!existingSpam) {
-                    ruleData = {
-                        name: `w! ${t('commands:automod.setup_rules.spam_protection', { default: 'Spam Protection' })}`,
-                        enabled: true,
-                        eventType: AutoModerationRuleEventType.MessageSend,
-                        triggerType: AutoModerationRuleTriggerType.Spam,
-                        actions: [
-                            {
-                                type: AutoModerationActionType.BlockMessage,
-                                metadata: {
-                                    customMessage: t('commands:automod.block_message_default', { default: 'Your message was blocked by the auto-mod system.' })
-                                }
-                            },
-                            ...(alertChannel ? [{
-                                type: AutoModerationActionType.SendAlertMessage,
-                                metadata: { channel: alertChannel }
-                            }] : [])
-                        ]
-                    };
+                } else {
+                    ruleData = spamConfig;
                 }
             } else if (preset === 'mention_spam') {
                 const existingMention = existingRules.find(r => r.triggerType === AutoModerationRuleTriggerType.MentionSpam);
@@ -1268,6 +1249,7 @@ async function createPresetRules(interaction, state, t, logger) {
                         createdRules.push(existingMention.name + " (Updated)");
                     } catch (error) {
                         logger.error(`Failed to update mention spam rule:`, error);
+                        ruleData = mentionRuleData;
                     }
                 } else {
                     ruleData = mentionRuleData;

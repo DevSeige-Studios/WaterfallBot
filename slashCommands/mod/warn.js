@@ -985,6 +985,15 @@ async function handleConfigWarns(bot, interaction, t, logger) {
     serverData.markModified('warnThresholds');
     await serverData.save();
 
+    modLog.logEvent(bot, interaction.guildId, 'warnConfigUpdate', {
+        threshold,
+        oldAction: currentConfig.action,
+        oldDuration: currentConfig.duration,
+        newAction,
+        newDuration,
+        moderator: interaction.user
+    });
+
     let actionText = '';
     if (newAction === 'none') {
         actionText = t('commands:warn.action_none');

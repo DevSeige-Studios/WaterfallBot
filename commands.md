@@ -1,10 +1,10 @@
 # Waterfall Commands
 
-*Last updated: Tue, 23 Dec 2025 10:31:31 GMT*
+*Last updated: Fri, 26 Dec 2025 11:49:52 GMT*
 
 ## Commands
 
-- 🤖 **Bot** (4)
+- 🤖 **Bot** (5)
 - 💻 **Dev** (9)
 - 🎲 **Games** (2)
 - 🧭 **General** (9)
@@ -14,6 +14,16 @@
 ---
 
 ## 🤖 Bot
+
+### `/botprofile`
+
+`🧪 Beta`
+
+The profile theme to apply
+
+**Required Permissions:** Administrator
+
+---
 
 ### `/botstats`
 
@@ -226,6 +236,7 @@ View and manage server statistics
 - `/serverstats activity` - View peak hours and activity patterns
 - `/serverstats voice` - View voice channel activity leaderboard
 - `/serverstats invites` - View invite tracking leaderboard
+- `/serverstats export` - Export server stats
 
 ---
 
