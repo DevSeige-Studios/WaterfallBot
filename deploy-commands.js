@@ -94,7 +94,7 @@ async function deployCommands() {
             );
 
             logger.neon('Successfully posted commands to discordbotlist.com:');
-            logger.info(dblResponse.data)
+            logger.neon(dblResponse.data)
         }
     } catch (error) {
         if (error.response) {
