@@ -11,13 +11,22 @@ module.exports = {
     name: Events.GuildDelete,
     async execute(bot, guild) {
         try {
+            const botProfile = process.env.CANARY === "true" ? "crimson" : "default";
+            const updateFields = {
+                botProfile: botProfile,
+                //botProfileLastUpdate: 0,
+                "logs.messages.webhook": [],
+                "logs.members.webhook": [],
+                "logs.moderation.webhook": [],
+                "logs.channels.webhook": [],
+                "logs.expressions.webhook": [],
+                "logs.invites.webhook": [],
+                "logs.roles.webhook": []
+            };
+
             if (process.env.CANARY !== "true") {
                 const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-                await Server.updateOne(
-                    { serverID: guild.id },
-                    { $set: { pendingDeletion: thirtyDaysFromNow } }
-                );
+                updateFields.pendingDeletion = thirtyDaysFromNow;
 
                 await ServerStats.updateOne(
                     { guildId: guild.id },
@@ -26,6 +35,12 @@ module.exports = {
 
                 logger.warnAlert(`[GuildDelete] Marked guild ${guild.id} (${guild.name}) for deletion on ${thirtyDaysFromNow.toISOString()}`);
             }
+
+            await Server.updateOne(
+                { serverID: guild.id },
+                { $set: updateFields }
+            );
+            logger.warn(`[GuildDelete] Cleared Logs and Bot Profile for guild: ${guild.id} (${guild.name})`);
             if (!settings.leaveWebhook || settings.leaveWebhook.length !== 2) return;
 
             const webhookClient = new WebhookClient({ id: settings.leaveWebhook[0], token: settings.leaveWebhook[1] });
@@ -52,3 +67,6 @@ module.exports = {
         }
     }
 };
+
+
+// contributors: @relentiousdragon

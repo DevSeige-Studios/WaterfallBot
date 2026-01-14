@@ -9,7 +9,7 @@ async function fetchBulkDeleteModerator(guild, targetChannelId, deletedCount) {
         return { moderator: null, auditLogPermissionsMissing: true };
     }
 
-    const timeThreshold = Date.now() - 5000;
+    const timeThreshold = Date.now() - 7500;
     try {
         for (let i = 0; i < 5; i++) {
             const logs = await guild.fetchAuditLogs({
@@ -38,11 +38,8 @@ async function fetchBulkDeleteModerator(guild, targetChannelId, deletedCount) {
                 await new Promise(res => setTimeout(res, 150));
                 continue;
             }
-            if (sameChannel) {
-                return { moderator: entry.executor, auditLogPermissionsMissing: false };
-            }
 
-            await new Promise(res => setTimeout(res, 150));
+            return { moderator: entry.executor, auditLogPermissionsMissing: false };
         }
     } catch (error) {
         if (error.code === 50013) {
@@ -95,3 +92,6 @@ module.exports = {
         }
     }
 };
+
+
+// contributors: @relentiousdragon

@@ -93,14 +93,16 @@ module.exports = {
                 message.channel.id,
             );
 
-            const dedupKey = `msgdel:${message.guild?.id ? message.guild.id : 0}:${message.id}`;
+            if (message.guild) {
+                const dedupKey = `msgdel:${message.guild.id}:${message.id}`;
 
-            await modLog.logEvent(bot, message.guild.id, 'messageDelete', {
-                message: message,
-                isComponentsV2: isComponentsV2,
-                moderator: moderator,
-                auditLogPermissionsMissing: auditLogPermissionsMissing
-            }, dedupKey);
+                await modLog.logEvent(bot, message.guild.id, 'messageDelete', {
+                    message: message,
+                    isComponentsV2: isComponentsV2,
+                    moderator: moderator,
+                    auditLogPermissionsMissing: auditLogPermissionsMissing
+                }, dedupKey);
+            }
         } catch (error) {
             if (settings.debug === 'true') {
                 logger.error(`Error logging message delete event: ${error.message}`, error);
@@ -108,3 +110,5 @@ module.exports = {
         }
     }
 };
+
+// contributors: @relentiousdragon
