@@ -25,7 +25,7 @@ module.exports = {
     contexts: [0, 1, 2],
     dev: false,
     mod: false,
-    beta: true,
+    beta: false,
     explicit: false,
     async execute(bot, interaction, funcs, settings, logger, t) {
         const prompt = interaction.options.getString('prompt');
@@ -137,11 +137,11 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
 
         async function isValidImageUrl(url) {
             if (!url || typeof url !== 'string') return false;
-            const exts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+            //const exts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
             try {
                 const u = new URL(url);
                 if (!u.protocol.startsWith('http')) return false;
-                if (!exts.some(ext => u.pathname.toLowerCase().endsWith(ext))) return false;
+                //if (!exts.some(ext => u.pathname.toLowerCase().endsWith(ext))) return false;
                 const res = await axios.head(url, { timeout: 2500 });
                 const type = res.headers['content-type'] || '';
                 return type.startsWith('image/');
@@ -483,3 +483,6 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
         created: 1765271948
     }
 };
+
+
+// contributors: @relentiousdragon

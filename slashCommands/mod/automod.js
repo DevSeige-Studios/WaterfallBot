@@ -603,7 +603,7 @@ async function handleSetup(interaction, t, logger, bot) {
 
                 if (state.enabledPresets.has(targetKey)) {
                     if (linkPreset === 'all_links') {
-                        const toDisable = ['link_inline_links', 'link_disguised_urls', 'link_invite_links', 'link_third_party_invites'];
+                        const toDisable = ['link_inline_links', 'link_disguised_urls', 'link_invite_links', 'link_third_party_invites', 'link_non_clickable_links'];
                         toDisable.forEach(k => state.enabledPresets.delete(k));
                     } else if (linkPreset === 'inline_links') {
                         state.enabledPresets.delete('link_disguised_urls');
@@ -616,6 +616,8 @@ async function handleSetup(interaction, t, logger, bot) {
                         state.enabledPresets.delete('link_all_links');
                     } else if (linkPreset === 'third_party_invites') {
                         state.enabledPresets.delete('link_invite_links');
+                        state.enabledPresets.delete('link_all_links');
+                    } else if (linkPreset === 'non_clickable_links') {
                         state.enabledPresets.delete('link_all_links');
                     }
                 }
@@ -678,6 +680,16 @@ async function handleSetup(interaction, t, logger, bot) {
 
 function createSetupPages(state, t, bot) {
     const pages = [];
+    const isZalgoEnabled = state.enabledPresets.has('general_zalgo');
+    const isAccentsEnabled = state.enabledPresets.has('general_filter_accents');
+    let warningText = "";
+
+    if (isZalgoEnabled) {
+        warningText = `\n-# ${e.warning} ${t('commands:automod.general_options.zalgo_warning_emoji')}`;
+        if (!isAccentsEnabled) {
+            warningText += `\n-# ${e.warning} ${t('commands:automod.general_options.zalgo_warning_accents')}`;
+        }
+    }
 
     const page1 = new ContainerBuilder()
         .setAccentColor(0x5865f2)
@@ -691,7 +703,7 @@ function createSetupPages(state, t, bot) {
                     new TextDisplayBuilder().setContent(
                         `# ${e.settings_cog_blue} ${t('commands:automod.setup_title')}\n` +
                         `-# ${t('commands:automod.setup_desc', { count: 0, preset: 'CUSTOM' })}` +
-                        (state.hasExistingSetupRules ? `\n-# ${e.warning} ${t('commands:automod.setup_override_notice')}` : '')
+                        (state.hasExistingSetupRules ? `\n-# ${e.warning} ${t('commands:automod.setup_override_notice')}` : '') + `${warningText}`
                     )
                 )
         )
@@ -780,6 +792,55 @@ function createSetupPages(state, t, bot) {
         page1.addActionRowComponents(mentionButtons);
     }
 
+
+
+    page1.addSeparatorComponents(
+        new SeparatorBuilder()
+            .setSpacing(SeparatorSpacingSize.Small)
+            .setDivider(false)
+    );
+
+    page1.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+            `### ${e.settings_cog} ${t('commands:automod.additional_options_title', { default: 'Additional Options' })}`
+        )
+    );
+
+    const generalOptions = [
+        {
+            id: 'zalgo',
+            label: t('commands:automod.general_options.zalgo', { default: 'Zalgo Text' }),
+            description: t('commands:automod.general_options.zalgo_desc', { default: 'Blocks zalgo/obfuscated text' })
+        },
+        {
+            id: 'filter_accents',
+            label: t('commands:automod.general_options.filter_accents', { default: 'Filter Accents' }),
+            description: t('commands:automod.general_options.filter_accents_desc', { default: 'Blocks messages with accents (e.g. héllo)' })
+        }
+    ];
+
+    generalOptions.forEach(opt => {
+        const isEnabled = state.enabledPresets.has(`general_${opt.id}`);
+        const isDisabled = opt.id === 'filter_accents' && !isZalgoEnabled;
+
+        page1.addSectionComponents(
+            new SectionBuilder()
+                .setButtonAccessory(
+                    new ButtonBuilder()
+                        .setCustomId(`general_${opt.id}`)
+                        .setStyle(isEnabled ? ButtonStyle.Success : ButtonStyle.Secondary)
+                        .setLabel(isEnabled ? t('common:enabled') : t('common:disabled'))
+                        .setEmoji(parseEmoji(isEnabled ? e.checkmark_green : e.red_point))
+                        .setDisabled(isDisabled)
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `**${opt.label}**\n${opt.description}`
+                    )
+                )
+        );
+    });
+
     page1.addSeparatorComponents(
         new SeparatorBuilder()
             .setSpacing(SeparatorSpacingSize.Small)
@@ -824,18 +885,6 @@ function createSetupPages(state, t, bot) {
 
     pages.push(page1);
 
-    const isZalgoEnabled = state.enabledPresets.has('general_zalgo');
-    const isAccentsEnabled = state.enabledPresets.has('general_filter_accents');
-    let warningText = "";
-
-    if (isZalgoEnabled) {
-        warningText = `\n-# ${e.warning} ${t('commands:automod.general_options.zalgo_warning_emoji')}`;
-        if (!isAccentsEnabled) {
-            warningText += `\n-# ${e.warning} ${t('commands:automod.general_options.zalgo_warning_accents')}`;
-        }
-    }
-
-
     const page2 = new ContainerBuilder()
         .setAccentColor(0x5865f2)
         .addSectionComponents(
@@ -846,9 +895,9 @@ function createSetupPages(state, t, bot) {
                 )
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `# ${e.chain} ${t('commands:automod.setup_rules.link_filter')}\n` +
+                        `# ${e.settings_cog_blue} ${t('commands:automod.setup_rules.link_filter')}\n` +
                         `-# ${t('commands:automod.setup_rules.link_filter_desc', { default: 'Additional protection options for your server' })}` +
-                        (state.hasExistingSetupRules ? `\n-# ${e.warning} ${t('commands:automod.setup_override_notice')}` : '') + `${warningText}`
+                        (state.hasExistingSetupRules ? `\n-# ${e.warning} ${t('commands:automod.setup_override_notice')}` : '')
                     )
                 )
         )
@@ -860,7 +909,7 @@ function createSetupPages(state, t, bot) {
 
     page2.addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-            `### ${e.chain} ${t('commands:automod.link_options_title', { default: 'Link Protection' })}`
+            `### 🔗 ${t('commands:automod.link_options_title', { default: 'Link Protection' })}`
         )
     );
 
@@ -869,6 +918,11 @@ function createSetupPages(state, t, bot) {
             id: 'all_links',
             label: t('commands:automod.link_options.all_links', { default: 'All Links' }),
             description: t('commands:automod.link_options.all_links_desc', { default: 'Blocks all links with bypass protection' })
+        },
+        {
+            id: 'non_clickable_links',
+            label: t('commands:automod.link_options.non_clickable_links', { default: 'Non-Clickable Links' }),
+            description: t('commands:automod.link_options.non_clickable_links_desc', { default: 'Blocks links without https:// (may cause false positives)' })
         },
         {
             id: 'invite_links',
@@ -906,54 +960,7 @@ function createSetupPages(state, t, bot) {
                         .setCustomId(`link_${opt.id}`)
                         .setStyle(isEnabled ? ButtonStyle.Success : ButtonStyle.Secondary)
                         .setLabel(isEnabled ? t('common:enabled') : t('common:disabled'))
-                        .setEmoji(parseEmoji(isEnabled ? e.checkmark_green : e.chain))
-                )
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        `**${opt.label}**\n${opt.description}`
-                    )
-                )
-        );
-    });
-
-    page2.addSeparatorComponents(
-        new SeparatorBuilder()
-            .setSpacing(SeparatorSpacingSize.Small)
-            .setDivider(false)
-    );
-
-    page2.addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-            `### ${e.settings_cog} ${t('commands:automod.additional_options_title', { default: 'Additional Options' })}`
-        )
-    );
-
-    const generalOptions = [
-        {
-            id: 'zalgo',
-            label: t('commands:automod.general_options.zalgo', { default: 'Zalgo Text' }),
-            description: t('commands:automod.general_options.zalgo_desc', { default: 'Blocks zalgo/obfuscated text' })
-        },
-        {
-            id: 'filter_accents',
-            label: t('commands:automod.general_options.filter_accents', { default: 'Filter Accents' }),
-            description: t('commands:automod.general_options.filter_accents_desc', { default: 'Blocks messages with accents (e.g. héllo)' })
-        }
-    ];
-
-    generalOptions.forEach(opt => {
-        const isEnabled = state.enabledPresets.has(`general_${opt.id}`);
-        const isDisabled = opt.id === 'filter_accents' && !isZalgoEnabled;
-
-        page2.addSectionComponents(
-            new SectionBuilder()
-                .setButtonAccessory(
-                    new ButtonBuilder()
-                        .setCustomId(`general_${opt.id}`)
-                        .setStyle(isEnabled ? ButtonStyle.Success : ButtonStyle.Secondary)
-                        .setLabel(isEnabled ? t('common:enabled') : t('common:disabled'))
-                        .setEmoji(parseEmoji(isEnabled ? e.checkmark_green : e.settings_cog))
-                        .setDisabled(isDisabled)
+                        .setEmoji(parseEmoji(isEnabled ? e.checkmark_green : e.red_point))
                 )
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
@@ -1255,7 +1262,8 @@ async function createPresetRules(interaction, state, t, logger) {
                     ruleData = mentionRuleData;
                 }
             } else if (preset === 'profanity_filter') {
-                ruleData = {
+                const existingProfanity = existingRules.find(r => r.triggerType === AutoModerationRuleTriggerType.KeywordPreset);
+                const profanityConfig = {
                     name: `w! ${t('commands:automod.setup_rules.profanity_filter', { default: 'Profanity Filter' })}`,
                     enabled: true,
                     eventType: AutoModerationRuleEventType.MessageSend,
@@ -1280,6 +1288,18 @@ async function createPresetRules(interaction, state, t, logger) {
                         }] : [])
                     ]
                 };
+
+                if (existingProfanity) {
+                    try {
+                        await existingProfanity.edit(profanityConfig);
+                        createdRules.push(existingProfanity.name + " (Updated)");
+                    } catch (error) {
+                        logger.error(`Failed to update profanity rule:`, error);
+                        ruleData = profanityConfig;
+                    }
+                } else {
+                    ruleData = profanityConfig;
+                }
             }
 
             if (ruleData) {
@@ -1476,6 +1496,7 @@ async function createPresetRules(interaction, state, t, logger) {
 function combineLinkPatterns(state, interaction) {
     const linkPresets = {
         'link_all_links': ["*http://*", "*https://*"],
+        'link_non_clickable_links': [LINK_PRESETS.non_clickable_links],
         'link_invite_links': ["*discord.gg/*", "*discord.com/invite/*"],
         'link_third_party_invites': ["*discord.gg/*", "*discord.com/invite/*", "*dsc.gg/*", "*invite.gg/*"],
         'link_email_addresses': [LINK_PRESETS.email_addresses],
@@ -1589,6 +1610,7 @@ async function handleList(interaction, t, logger, bot) {
                         )
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(`# ${e.blurple_rulebook} ${t('commands:automod.list_title')}`),
+                            new TextDisplayBuilder().setContent(`-# ${t('commands:automod.list_embed_description', { count: rules.size })}`),
                         ),
                 )
                 .addSeparatorComponents(
@@ -1705,32 +1727,35 @@ async function handleCreate(interaction, t, logger) {
         });
         return;
     }
-    const actionTypes = {
-        block: [{
+    let actions = [];
+    if (action === "block") {
+        actions.push({
             type: AutoModerationActionType.BlockMessage,
             metadata: {
                 customMessage: t('commands:automod.block_message_default')
             }
-        }],
-        alert: [{
+        });
+    } else if (action === "alert") {
+        actions.push({
             type: AutoModerationActionType.SendAlertMessage,
             metadata: {
                 channel: logChannel.id
             }
-        }],
-        timeout: [{
+        });
+    } else if (action === "timeout") {
+        actions.push({
             type: AutoModerationActionType.Timeout,
             metadata: {
                 durationSeconds: duration ? getDurationSeconds(duration) : 60
             }
-        }]
-    };
+        });
+    }
 
     let ruleData = {
         name,
         enabled: true,
         eventType: AutoModerationRuleEventType.MessageSend,
-        actions: actionTypes[action]
+        actions: actions
     };
 
     switch (type) {
@@ -2389,3 +2414,5 @@ function getDurationSeconds(durationStr) {
     };
     return durationMap[durationStr] || 60;
 }
+
+// contributors: @relentiousdragon

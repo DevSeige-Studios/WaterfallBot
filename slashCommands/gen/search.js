@@ -8,33 +8,15 @@ const e = require("../../data/emoji.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const logger = require("../../logger.js");
 const funcs = require("../../util/functions.js");
-
-async function getLogoUrl(domain) {
-    return `https://logo.clearbit.com/${domain}`;
-}
-
-async function isImageUrl(url, timeout = 2000) {
-    if (!url) return false;
-    const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
-    try {
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname.toLowerCase();
-        if (imageExtensions.some(ext => pathname.endsWith(ext))) return true;
-    } catch { }
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-        const response = await fetch(url, { method: 'HEAD', signal: controller.signal, redirect: 'follow' });
-        clearTimeout(timeoutId);
-        let contentType = response.headers.get('content-type');
-        if (!contentType) return imageExtensions.some(ext => url.toLowerCase().includes(ext));
-        return contentType.startsWith('image/');
-    } catch {
-        return imageExtensions.some(ext => url.toLowerCase().includes(ext));
-    }
-}
+const ddg = require("../../util/duckduckgo.js");
 const PAGINATION_CACHE = new Map();
 const PAGINATION_TTL = 10 * 60 * 1000;
+
+const DDG_AUTOCOMPLETE_CACHE = new Map();
+const DDG_CACHE_TTL = 60 * 60 * 1000;
+const DDG_CACHE_MAX_SIZE = 1000;
+const DDG_RATE_LIMIT = new Map();
+const DDG_COOLDOWN = 500;
 
 function makeSessionId(engine, query, userId) {
     const short = crypto.randomBytes(6).toString('hex');
@@ -176,16 +158,16 @@ async function fetchImdbRating(imdbId) {
     }
 }
 
-async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, sessionId, t) {
+async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, sessionId, t, specialBuilder = null) {
     let domain, logoUrl;
     try {
         domain = new URL(result.url).hostname;
-        logoUrl = await getLogoUrl(domain);
+        logoUrl = await funcs.getLogoUrl(domain);
     } catch {
         domain = 'duckduckgo.com';
     }
 
-    if (domain == "duckduckgo.com" || !domain || domain == null || domain == "" || domain == undefined) {
+    if (domain === "duckduckgo.com" || !domain) {
         logoUrl = 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/duckduckgo-icon.png';
     }
 
@@ -225,7 +207,9 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
                 .setURL(result.url || 'https://duckduckgo.com')
         );
         const container = new ContainerBuilder()
-            .setAccentColor(0x4756ff)
+            .setAccentColor(0x4756ff);
+        if (specialBuilder && page === 1) specialBuilder(container);
+        container
             .addSectionComponents(section)
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
@@ -237,7 +221,7 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
         return container;
     }
 
-    if (result.isAbstract && page === 1) {
+    if (result.isAbstract) {
         const ddgPrevId = `search_ddg_prev_${page - 1}_${sessionId}`;
         const ddgNextId = `search_ddg_next_${page + 1}_${sessionId}`;
         const expired = isPaginationExpired(sessionId);
@@ -262,7 +246,7 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
         let imdbId = null;
         let imdbRating = null;
         let imdbType = null;
-        if (result.infobox && page === 1) {
+        if (result.infobox) {
             const infoboxContent = result.infobox.content || [];
             const embedFields = cleanInfoboxFields(infoboxContent);
             let wikidataDesc = null;
@@ -343,8 +327,8 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
         let validFavicon = false;
         if (faviconDomain) {
             try {
-                faviconUrl = await getLogoUrl(faviconDomain);
-                validFavicon = await isImageUrl(faviconUrl);
+                faviconUrl = await funcs.getLogoUrl(faviconDomain);
+                validFavicon = await funcs.isImageUrl(faviconUrl);
             } catch { }
         }
         const wikiLogo = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/100px-Wikipedia-logo-v2.svg.png';
@@ -387,7 +371,9 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
                 .setURL(result.url || 'https://duckduckgo.com')
         );
         const container = new ContainerBuilder()
-            .setAccentColor(0x4756ff)
+            .setAccentColor(0x4756ff);
+        if (specialBuilder && page === 1) specialBuilder(container);
+        container
             .addSectionComponents(section)
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
@@ -439,7 +425,9 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
                 .setURL(result.url || 'https://duckduckgo.com')
         );
         const container = new ContainerBuilder()
-            .setAccentColor(0x4756ff)
+            .setAccentColor(0x4756ff);
+        if (specialBuilder && page === 1) specialBuilder(container);
+        container
             .addSectionComponents(section)
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
@@ -452,7 +440,7 @@ async function buildDuckDuckGoComponent(result, page, totalPages, bot, query, se
     }
 }
 
-async function buildSerpApiComponent(res, page, totalPages, engineName, color, emoji, query, logoUrl, domain, profanityDetected, sessionId, t) {
+async function buildSerpApiComponent(res, page, totalPages, engineName, color, emoji, query, logoUrl, domain, profanityDetected, sessionId, t, specialBuilder = null) {
     const serpPrevId = `search_${engineName}_prev_${page - 1}_${sessionId}`;
     const serpNextId = `search_${engineName}_next_${page + 1}_${sessionId}`;
     const expired = isPaginationExpired(sessionId);
@@ -611,7 +599,7 @@ async function buildSerpApiComponent(res, page, totalPages, engineName, color, e
             allImages.map(async (img) => {
                 if (img.url) {
                     try {
-                        const isValid = await isImageUrl(img.url);
+                        const isValid = await funcs.isImageUrl(img.url);
                         return { ...img, isValid };
                     } catch (err) {
                         return { ...img, isValid: false };
@@ -632,14 +620,14 @@ async function buildSerpApiComponent(res, page, totalPages, engineName, color, e
     let validDefaultLogo = false;
 
     try {
-        domainLogoUrl = await getLogoUrl(domain);
-        validDomainLogo = await isImageUrl(domainLogoUrl);
+        domainLogoUrl = await funcs.getLogoUrl(domain);
+        validDomainLogo = await funcs.isImageUrl(domainLogoUrl);
         if (!validDomainLogo) domainLogoUrl = null;
     } catch (err) {
         console.log("Failed to get domain logo:", err.message);
     }
     try {
-        validDefaultLogo = await isImageUrl(defaultLogo);
+        validDefaultLogo = await funcs.isImageUrl(defaultLogo);
     } catch (err) {
         console.log("Failed to check default logo:", err.message);
     }
@@ -712,8 +700,8 @@ async function buildSerpApiComponent(res, page, totalPages, engineName, color, e
     }
 
     let wikipediaData = null;
-    if (!profanityDetected && (res.link.includes('wikipedia.org') || domain.includes('wikipedia.org'))) {
-        const titleMatch = res.link.match(/wikipedia\.org\/wiki\/([^?#]+)/);
+    if (!profanityDetected && (res.link?.includes('wikipedia.org') || domain?.includes('wikipedia.org'))) {
+        const titleMatch = res.link?.match(/wikipedia\.org\/wiki\/([^?#]+)/);
         if (titleMatch) {
             const pageTitle = decodeURIComponent(titleMatch[1].replace(/_/g, ' '));
             try {
@@ -1065,7 +1053,9 @@ async function buildSerpApiComponent(res, page, totalPages, engineName, color, e
     const actionRow = new ActionRowBuilder().addComponents(...actionRowButtons);
 
     const container = new ContainerBuilder()
-        .setAccentColor(color)
+        .setAccentColor(color);
+    if (specialBuilder && page === 1) specialBuilder(container);
+    container
         .addSectionComponents(section)
         .addSeparatorComponents(
             new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true)
@@ -1159,6 +1149,77 @@ async function getWikipediaAutocomplete(query, userId) {
     } catch (err) {
         logger.error(`[Wikipedia Autocomplete] Error fetching suggestions: ${err.message}`);
         logger.debug(`[Wikipedia Autocomplete] Full error:`, err);
+        return [];
+    }
+}
+
+
+async function getDdgAutocomplete(query, userId) {
+    logger.debug(`[DDG Autocomplete] Called with query="${query}", userId=${userId}`);
+
+    const cached = DDG_AUTOCOMPLETE_CACHE.get(query);
+    if (cached) {
+        const age = Date.now() - cached.timestamp;
+        if (age < DDG_CACHE_TTL) {
+            logger.debug(`[DDG Autocomplete] Cache hit for "${query}": ${cached.results.length} results`);
+            return cached.results;
+        } else {
+            DDG_AUTOCOMPLETE_CACHE.delete(query);
+        }
+    }
+
+    const now = Date.now();
+    const lastRequest = DDG_RATE_LIMIT.get(userId) || 0;
+    if (now - lastRequest < DDG_COOLDOWN) {
+        logger.debug(`[DDG Autocomplete] Rate limited for userId=${userId}`);
+        for (const [key, entry] of DDG_AUTOCOMPLETE_CACHE) {
+            if (Date.now() - entry.timestamp >= DDG_CACHE_TTL) continue;
+            if (query.toLowerCase().startsWith(key.toLowerCase()) && entry.results.length > 0) {
+                const filtered = entry.results.filter(s => s.toLowerCase().includes(query.toLowerCase()));
+                logger.debug(`[DDG Autocomplete] Using prefix cache from "${key}"`);
+                return filtered;
+            }
+        }
+        return [];
+    }
+    DDG_RATE_LIMIT.set(userId, now);
+
+    try {
+        const suggestions = await ddg.ddgAutocomplete(query);
+
+        if (suggestions.length > 0) {
+            const joined = suggestions.join(' ||| ');
+            const filteredString = await filterQuery(joined);
+
+            if (filteredString === '[REDACTED]') {
+                return [];
+            }
+
+            const filteredSuggestions = filteredString.split(' ||| ');
+            const safeSuggestions = [];
+            for (let i = 0; i < suggestions.length && i < filteredSuggestions.length; i++) {
+                const original = suggestions[i];
+                const filtered = filteredSuggestions[i];
+                if (original === filtered && !filtered.includes('----')) {
+                    safeSuggestions.push(original);
+                }
+            }
+
+            if (DDG_AUTOCOMPLETE_CACHE.size >= DDG_CACHE_MAX_SIZE) {
+                const oldestKey = DDG_AUTOCOMPLETE_CACHE.keys().next().value;
+                DDG_AUTOCOMPLETE_CACHE.delete(oldestKey);
+            }
+
+            DDG_AUTOCOMPLETE_CACHE.set(query, {
+                results: safeSuggestions,
+                timestamp: Date.now()
+            });
+            return safeSuggestions;
+        }
+
+        return [];
+    } catch (err) {
+        logger.error(`[DDG Autocomplete] Error: ${err.message}`);
         return [];
     }
 }
@@ -1373,6 +1434,733 @@ async function handleStackOverflow(interaction, query, page = 1, isPagination = 
     await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
 }
 
+async function handleEmojipedia(interaction, emoji, page = 1, isPagination = false, sessionId = null, t) {
+    if (!isPagination) {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        try {
+            const data = await ddgEmojipedia(emoji);
+            if (!data) {
+                return interaction.editReply({ content: `${e.not_found} ${t('commands:search.emojipedia.not_found')}` });
+            }
+            const container = buildEmojipediaEmbed(data, emoji, t);
+            await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+        } catch (err) {
+            logger.error(`[Emojipedia] Error: ${err.message}`);
+            return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_error', { engine: 'Emojipedia' })}` });
+        }
+    }
+}
+
+function getWeatherEmoji(conditionCode) {
+    const iconMap = {
+        'Clear': '☀️',
+        'MostlyClear': '🌤️',
+        'PartlyCloudy': '⛅',
+        'MostlyCloudy': '🌥️',
+        'Cloudy': '☁️',
+        'Overcast': '☁️',
+        'Drizzle': '🌦️',
+        'Rain': '🌧️',
+        'HeavyRain': '🌧️',
+        'Snow': '❄️',
+        'HeavySnow': '🌨️',
+        'Flurries': '🌨️',
+        'Sleet': '🌨️',
+        'FreezingRain': '🌧️',
+        'FreezingDrizzle': '🌧️',
+        'Hail': '🌨️',
+        'Thunderstorms': '⛈️',
+        'IsolatedThunderstorms': '⛈️',
+        'ScatteredThunderstorms': '⛈️',
+        'StrongStorms': '⛈️',
+        'Windy': '💨',
+        'Breezy': '💨',
+        'Foggy': '🌫️',
+        'Haze': '🌫️',
+        'Smoky': '🌫️',
+        'Dust': '🌫️',
+        'BlowingDust': '🌫️',
+        'BlowingSnow': '🌨️',
+        'Tornado': '🌪️',
+        'TropicalStorm': '🌀',
+        'Hurricane': '🌀',
+        'SunFlurries': '🌨️',
+        'SunShowers': '🌦️',
+        'Hot': '🔥',
+        'Cold': '🥶'
+    };
+    return iconMap[conditionCode] || '🌡️';
+}
+
+function buildForecastEmbed(forecast, locationQuery, t, containerProp) {
+    const current = forecast.currentWeather || forecast.currently || {};
+
+    const locationRaw = forecast.location;
+    const locationString = typeof locationRaw === 'string' ? locationRaw : null;
+    const locationObj = typeof locationRaw === 'object' ? locationRaw : {};
+
+    const location = locationString || forecast.name || locationObj.name || locationObj.city || forecast.flags?.['ddg-location'] || locationQuery;
+
+    const daily = forecast.forecastDaily || forecast.daily || {};
+    const hourly = forecast.forecastHourly || forecast.hourly || {};
+    const alerts = forecast.weatherAlerts || forecast.alerts || [];
+
+    logger.debug(`[DDG Forecast] currentWeather keys: ${Object.keys(current).join(', ')}`);
+    if (Object.keys(current).length > 0) {
+        logger.debug(`[DDG Forecast] currentWeather sample: ${JSON.stringify(current).slice(0, 300)}`);
+    }
+
+    const temp = current.temperature ?? current.temp ?? current.temperatureApparent ??
+        current.value ?? current.degrees ?? '?';
+    const tempRounded = typeof temp === 'number' ? Math.round(temp) : temp;
+    const icon = getWeatherEmoji(current.icon || current.conditionCode || current.weatherCode);
+    const feelsLike = current.temperatureApparent ?? current.apparentTemperature ?? current.feelsLike;
+    const humidity = current.humidity;
+    const windSpeed = current.windSpeed ?? current.wind;
+    const summary = current.summary || current.conditionDescription || current.description ||
+        daily.summary || '';
+
+    const orderedContent = [];
+
+    orderedContent.push(`## 🌡️ ${tempRounded}°C  ${summary}`);
+
+    const currentDetails = [];
+    if (feelsLike != null) currentDetails.push(`${t('commands:search.weather.feels_like')}: ${Math.round(feelsLike)}°`);
+    if (humidity != null) {
+        const humidityVal = humidity > 1 ? humidity : Math.round(humidity * 100);
+        currentDetails.push(`💧 ${humidityVal}%`);
+    }
+    if (windSpeed != null) currentDetails.push(`💨 ${Math.round(windSpeed)} km/h`);
+    if (currentDetails.length > 0) {
+        orderedContent.push(`-# ${currentDetails.join(' | ')}`);
+    }
+
+    const hourlyData = hourly.hours || hourly.data || (Array.isArray(hourly) ? hourly : []);
+    if (hourlyData.length > 0) {
+        const hourlyPreview = hourlyData.slice(0, 6).map(h => {
+            const hTemp = h.temperature ?? h.temp ?? h.temperatureApparent ?? '?';
+            const hIcon = getWeatherEmoji(h.icon || h.conditionCode);
+            return `${hIcon} ${typeof hTemp === 'number' ? Math.round(hTemp) : hTemp}°`;
+        }).join(' → ');
+        orderedContent.push('');
+        orderedContent.push(`**${t('commands:search.weather.next_6_hours')}:** ${hourlyPreview}`);
+    }
+
+    const dailyData = daily.days || daily.data || (Array.isArray(daily) ? daily : []);
+    if (dailyData.length > 0) {
+        orderedContent.push('');
+        orderedContent.push(`**📅 ${t('commands:search.weather.daily_forecast')}:**`);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        dailyData.slice(0, 5).forEach(d => {
+            let dayName = 'Day';
+            if (d.time) {
+                const date = new Date(typeof d.time === 'number' ? d.time * 1000 : d.time);
+                dayName = days[date.getDay()];
+            } else if (d.forecastStart) {
+                const date = new Date(d.forecastStart);
+                dayName = days[date.getDay()];
+            }
+            const high = d.temperatureHigh ?? d.temperatureMax ?? d.high ?? '?';
+            const low = d.temperatureLow ?? d.temperatureMin ?? d.low ?? '?';
+            const dIcon = getWeatherEmoji(d.icon || d.conditionCode);
+            const highVal = typeof high === 'number' ? Math.round(high) : high;
+            const lowVal = typeof low === 'number' ? Math.round(low) : low;
+            orderedContent.push(`-# ${dayName}: ${dIcon} ${highVal}°/${lowVal}°`);
+        });
+    }
+
+    const alertsArray = Array.isArray(alerts) ? alerts : [];
+    if (alertsArray.length > 0) {
+        orderedContent.push('');
+        orderedContent.push(`${e.warning} **${alertsArray.length} ${t('commands:search.weather.alerts')}:**`);
+        alertsArray.slice(0, 2).forEach(alert => {
+            const alertText = alert.title || alert.headline || alert.description?.slice(0, 100) || 'Weather Alert';
+            orderedContent.push(`-# ${alertText}`);
+        });
+    }
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://developer.apple.com/assets/elements/icons/weatherkit/weatherkit-96x96_2x.png'))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${icon == "🌡️" ? "🌤️" : icon} ${t('commands:search.weather.title', { location })}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [Apple WeatherKit](https://developer.apple.com/weatherkit/data-source-attribution/)`)
+        );
+
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(0x4A90D9);
+    container
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')))
+
+    if (current.asOf) {
+        const asOfTime = Math.floor(new Date(current.asOf).getTime() / 1000);
+        container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true));
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`-# ${t('commands:search.weather.as_of', { dateTime: `<t:${asOfTime}:F>` })}`)
+        );
+    }
+
+
+    return container;
+}
+
+function buildExpandUrlEmbed(data, query, t, containerProp) {
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(data.isSafe ? 0x4A90D9 : 0xFF5252);
+
+    const orderedContent = [];
+
+    orderedContent.push(`## 🔗 ${t('commands:search.expand_url.title')}`);
+    orderedContent.push('');
+    orderedContent.push(`**${t('commands:search.expand_url.shortened')}:** \`${data.requested_url}\``);
+
+    if (data.isSafe) {
+        orderedContent.push(`**${t('commands:search.expand_url.resolved')}:** ${data.resolved_url}`);
+    } else {
+        orderedContent.push(`**${t('commands:search.expand_url.resolved')}:** ||${data.resolved_url}||`);
+        orderedContent.push('');
+        orderedContent.push(`${e.warning} **${t('commands:search.expand_url.unsafe_warning')}:** ${funcs.truncate(data.safetyReason || 'Potential security risk detected', 100)}.`);
+    }
+
+    if (data.service_safety_info) {
+        orderedContent.push(`-# **Service Info:** ${funcs.truncate(data.service_safety_info, 150)}`);
+    }
+
+    const textComponent = new TextDisplayBuilder().setContent(orderedContent.join('\n'));
+    const canShowButton = data.isSafe && data.resolved_url && data.resolved_url.length <= 512;
+
+    if (canShowButton) {
+        container.addSectionComponents(new SectionBuilder()
+            .addTextDisplayComponents(textComponent)
+            .setButtonAccessory(new ButtonBuilder()
+                .setStyle(ButtonStyle.Link)
+                .setLabel(t('common:visit') || 'Visit')
+                .setURL(data.resolved_url))
+        );
+    } else {
+        container.addTextDisplayComponents(textComponent);
+    }
+
+    container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${e.blurple_mod} ${t('commands:search.expand_url.note')}`));
+
+    return container;
+}
+
+function getTwemojiUrl(emoji) {
+    const codePoints = Array.from(emoji)
+        .map(c => c.codePointAt(0).toString(16))
+        .filter(cp => cp !== 'fe0f');
+    const slug = codePoints.join('-');
+    return `https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/72x72/${slug}.png`;
+}
+
+function buildEmojipediaEmbed(data, emoji, t, containerProp) {
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(0x7360f2);
+
+    let section = new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${data.title || emoji}`))
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(getTwemojiUrl(emoji)));
+
+    if (data.description) {
+        const lines = data.description.replace(/\r/g, '').split(/\n+/).filter(l => l.trim().length > 0);
+        if (lines.length > 0) {
+            const desc = funcs.decodeHtmlEntities(funcs.truncate(lines[0], 350), 'https://emojipedia.org');
+            if (desc && desc.trim()) {
+                section.addTextDisplayComponents(new TextDisplayBuilder().setContent(desc.trim()));
+            }
+        }
+    }
+
+    if (data.alsoKnownAs && data.alsoKnownAs.length > 0) {
+        section.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# **Aliases:** ${data.alsoKnownAs.slice(0, 5).join(', ')}`));
+    }
+
+    /*if (data.url) {
+        section.setButtonAccessory(new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(t('common:visit') || 'Visit')
+            .setURL(data.url)
+        );
+    } */
+
+    container.addSectionComponents(section);
+
+    const technical = [];
+    if (data.codepoints) technical.push(`**Codepoints:** \`${data.codepoints}\``);
+    if (data.shortcodes) technical.push(`**Shortcodes:** \`${data.shortcodes}\``);
+    if (data.appleName) technical.push(`**Apple Name:** ${data.appleName}`);
+    if (data.emojiVersion) technical.push(`**Version:** Emoji ${data.emojiVersion}`);
+
+    if (technical.length > 0) {
+        container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
+        container.addTextDisplayComponents(new TextDisplayBuilder().setContent(technical.join('\n')));
+    }
+
+    return container;
+}
+
+function buildStocksEmbed(stock, symbol, t, containerProp) {
+    const formatNum = (num) => {
+        if (num === null || num === undefined) return '?';
+        const val = Number(num);
+        if (isNaN(val)) return num;
+        return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const price = formatNum(stock.Last);
+    const change = stock.ChangeFromPreviousClose || 0;
+    const percentChange = stock.PercentChangeFromPreviousClose || 0;
+    const currency = stock.Currency || 'USD';
+    const isPositive = change >= 0;
+    const changeEmoji = isPositive ? '📈' : '📉';
+    const changeSign = isPositive ? '+' : '';
+    const accentColor = isPositive ? 0x00C853 : 0xFF5252;
+
+    const security = stock.Security || {};
+    const companyName = security.Name || symbol.toUpperCase();
+
+    const orderedContent = [];
+
+    orderedContent.push(`## 💵 ${price} ${currency}`);
+    orderedContent.push(`${changeEmoji} **${changeSign}${Math.abs(change).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}** (${changeSign}${Math.abs(percentChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)`);
+    orderedContent.push('');
+
+    const stats = [];
+    if (stock.Open != null) stats.push(`**${t('commands:search.stocks.open')}:** ${formatNum(stock.Open)}`);
+    if (stock.High != null) stats.push(`**${t('commands:search.stocks.high')}:** ${formatNum(stock.High)}`);
+    if (stock.Low != null) stats.push(`**${t('commands:search.stocks.low')}:** ${formatNum(stock.Low)}`);
+    if (stock.Volume != null) stats.push(`**${t('commands:search.stocks.volume')}:** ${funcs.abbr(stock.Volume)}`);
+
+    if (stats.length > 0) {
+        orderedContent.push(stats.slice(0, 2).join(' | '));
+        if (stats.length > 2) {
+            orderedContent.push(stats.slice(2).join(' | '));
+        }
+    }
+
+    if (stock.High52Weeks != null || stock.Low52Weeks != null) {
+        orderedContent.push('');
+        const weekStats = [];
+        if (stock.High52Weeks != null) weekStats.push(`**${t('commands:search.stocks.high_52w')}:** ${formatNum(stock.High52Weeks)}`);
+        if (stock.Low52Weeks != null) weekStats.push(`**${t('commands:search.stocks.low_52w')}:** ${formatNum(stock.Low52Weeks)}`);
+        orderedContent.push(`-# ${weekStats.join(' | ')}`);
+    }
+
+    if (stock.PreviousClose != null) {
+        orderedContent.push(`-# **${t('commands:search.stocks.prev_close')}:** ${formatNum(stock.PreviousClose)}`);
+    }
+
+    let timestamp = stock.Timestamp;
+    if (!timestamp && stock.Date && stock.Time) {
+        try {
+            const dateStr = `${stock.Date} ${stock.Time}`.replace(/ET|EST|EDT/g, '').trim();
+            const d = new Date(dateStr);
+            if (!isNaN(d.getTime())) {
+                timestamp = Math.floor(d.getTime() / 1000);
+            }
+        } catch (e) { }
+    }
+    if (timestamp) {
+        orderedContent.push('');
+        orderedContent.push(`-# ${t('commands:search.meta.last_updated')}: <t:${timestamp}:R>`);
+    }
+
+    const sourceName = stock.source_api || 'Xignite';
+    const sourceUrl = sourceName === 'Yahoo Finance' ? 'https://finance.yahoo.com/' : 'https://www.xignite.com/';
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://img.icons8.com/fluency/256/bullish.png'))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${changeEmoji} ${t('commands:search.stocks.title', { symbol: symbol.toUpperCase(), name: companyName })}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [${sourceName}](${sourceUrl})`)
+        );
+
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(accentColor);
+    container
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')))
+
+    return container;
+}
+
+function buildCoinflipEmbed(t, containerProp) {
+    const random = crypto.randomInt(0, 2);
+    const result = random === 0 ? 'heads' : 'tails';
+    const resultEmoji = random === 0 ? '🪙' : '🪙';
+    const resultText = t(`commands:search.coinflip.${result}`);
+
+    const headsIcon = 'https://c.tenor.com/9FKetp9PPUUAAAAC/tenor.gif';
+    const tailsIcon = 'https://c.tenor.com/JCa8VnPcfp0AAAAC/tenor.gif';
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(result === 'heads' ? headsIcon : tailsIcon))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${resultEmoji} ${t('commands:search.coinflip.title')}`),
+            new TextDisplayBuilder().setContent(`### ${t('commands:search.coinflip.result_label')}: **${resultText}**`)
+        );
+
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(0xf1c40f);
+    container.addSectionComponents(section);
+
+    return container;
+}
+
+function buildTimeEmbed(timeResult, locationQuery, t, containerProp) {
+    const locations = timeResult.locations || [];
+    if (locations.length === 0) return null;
+
+    const loc = locations[0];
+    const geo = loc.geo || {};
+    const timeData = loc.time || {};
+
+    const datetime = timeData.datetime || {};
+    const timezone = timeData.timezone || {};
+
+    const locationName = geo.name || locationQuery;
+
+    const countryName = geo.country?.name || geo.country || '';
+    const displayLocation = countryName ? `${locationName}, ${countryName}` : locationName;
+
+    const orderedContent = [];
+
+    if (datetime.hour != null) {
+        const hour = String(datetime.hour);
+        const minute = String(datetime.minute ?? 0).padStart(2, '0');
+        const second = String(datetime.second ?? 0).padStart(2, '0');
+        const timeStr = `${hour}:${minute}:${second}`;
+        orderedContent.push(`## 🕐 ${timeStr}`);
+    } else if (timeData.iso) {
+        try {
+            const d = new Date(timeData.iso);
+            orderedContent.push(`## 🕐 ${d.toLocaleTimeString()}`);
+        } catch { }
+    }
+
+    if (datetime.year && datetime.month && datetime.day) {
+        const months = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        try {
+            const d = new Date(datetime.year, datetime.month - 1, datetime.day);
+            const dayName = days[d.getDay()];
+            const monthName = months[datetime.month];
+            orderedContent.push(`📅 ${dayName}, ${monthName} ${datetime.day}, ${datetime.year}`);
+        } catch {
+            orderedContent.push(`📅 ${datetime.month}/${datetime.day}/${datetime.year}`);
+        }
+    }
+
+    if (timezone.zonename || timezone.zoneabb) {
+        orderedContent.push('');
+        const tzInfo = [];
+        if (timezone.zonename) tzInfo.push(`**Timezone:** ${timezone.zonename}`);
+        if (timezone.zoneabb) tzInfo.push(`(${timezone.zoneabb})`);
+        orderedContent.push(`-# 🌍 ${tzInfo.join(' ')}`);
+    }
+
+    if (timezone.offset) {
+        orderedContent.push(`-# **${t('commands:search.time.utc_offset')}:** ${timezone.offset}`);
+    }
+
+    if (timezone.zonedst != null) {
+        orderedContent.push(`-# **${t('commands:search.time.dst_active')}:** ${timezone.zonedst > 0 ? t('common:yes') : t('common:no')}`);
+    }
+
+    const thumbnailUrl = 'https://img.icons8.com/3d-fluency/256/clock.png';
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailUrl))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${t('commands:search.time.title', { location: displayLocation })}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [TimeAndDate.com](https://www.timeanddate.com/)`)
+        );
+
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(0x9C27B0);
+    container
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')))
+
+    return container;
+}
+
+function buildCurrencyEmbed(currencyResult, from, to, amount, t, containerProp) {
+    const conversion = currencyResult.conversion || {};
+    const topConversions = currencyResult.topConversions || [];
+
+    function formatMoney(val) {
+        if (!val) return '?';
+        const num = parseFloat(val);
+        if (isNaN(num)) return val;
+        return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+
+    const fromAmount = formatMoney(conversion['from-amount'] || amount);
+    const fromCurrency = conversion['from-currency-symbol'] || from;
+    const toAmount = formatMoney(conversion['converted-amount']);
+    const toCurrency = conversion['to-currency-symbol'] || to;
+    const rate = conversion['conversion-rate'];
+
+    function getCurrencyEmoji(code) {
+        const mapping = {
+            'USD': '💵',
+            'EUR': '💶',
+            'GBP': '💷',
+            'JPY': '💴',
+            'CNY': '💴',
+            'KRW': '₩',
+            'INR': '₹',
+            'BTC': '₿',
+            'ETH': 'Ξ'
+        };
+        return mapping[code.toUpperCase()] || '🪙';
+    }
+
+    const orderedContent = [];
+
+    orderedContent.push(`## ${getCurrencyEmoji(fromCurrency)} ${fromAmount} ${fromCurrency} = ${getCurrencyEmoji(toCurrency)} ${toAmount} ${toCurrency}`);
+
+    if (rate) {
+        orderedContent.push(`-# **${t('commands:search.currency.rate')}:** 1 ${fromCurrency} = ${rate} ${toCurrency}`);
+    }
+
+    if (topConversions.length > 0) {
+        orderedContent.push('');
+        orderedContent.push(`**${t('commands:search.currency.other_conversions')}:**`);
+        topConversions.slice(0, 5).forEach(conv => {
+            if (conv['to-currency-symbol'] !== toCurrency) {
+                const symbol = conv['to-currency-symbol'] || '';
+                const convAmount = formatMoney(conv['converted-amount']);
+                orderedContent.push(`-# ${fromAmount} ${fromCurrency} = ${convAmount} ${symbol}`);
+            }
+        });
+    }
+
+    const headers = currencyResult.headers || {};
+    if (headers['utc-timestamp']) {
+        orderedContent.push('');
+        try {
+            const timestamp = Math.floor(new Date(headers['utc-timestamp']).getTime() / 1000);
+            orderedContent.push(`-# Updated: <t:${timestamp}:R>`);
+        } catch { }
+    }
+
+    const isExchangeApi = currencyResult.source_api === 'ExchangeRate-API';
+    const sourceIcon = 'https://img.icons8.com/3d-fluency/256/cash-in-hand.png';
+    const sourceName = isExchangeApi ? 'ExchangeRate-API' : 'XE.com';
+    const sourceUrl = isExchangeApi ? 'https://www.exchangerate-api.com/' : 'https://www.xe.com/';
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(sourceIcon))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# 💱 Currency Conversion`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [${sourceName}](${sourceUrl})`)
+        );
+
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(0xFFB300);
+    container
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')))
+
+    return container;
+}
+
+function buildDictionaryEmbed(data, word, t, containerProp) {
+    const phonetic = data.phonetic || (data.phonetics && data.phonetics[0]?.text) || '';
+    const meanings = data.meanings || [];
+
+    let defText = meanings.slice(0, 3).map(meaning => {
+        let defs = meaning.definitions.slice(0, 3).map((def, i) => {
+            let line = `**${i + 1}.** ${def.definition}`;
+            if (def.example) line += `\n> _${def.example}_`;
+            return line;
+        }).join('\n\n');
+        let syns = meaning.synonyms && meaning.synonyms.length ? `\n> **${t('common:synonyms')}:** ${meaning.synonyms.slice(0, 3).join(', ')}` : '';
+        let ants = meaning.antonyms && meaning.antonyms.length ? `\n> **${t('common:antonyms')}:** ${meaning.antonyms.slice(0, 3).join(', ')}` : '';
+        return `*${meaning.partOfSpeech}*${syns}${ants}\n${defs}`;
+    }).join('\n\n');
+
+    if (!defText) defText = t('commands:search.dictionary.no_definitions');
+    if (defText.length > 2000) {
+        defText = defText.slice(0, 1997) + '...';
+    }
+
+    const orderedContent = [];
+    orderedContent.push(defText);
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://cdn-icons-png.flaticon.com/512/2991/2991148.png'))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# 📖 ${data.word}${phonetic ? ` (${phonetic})` : ''}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [Dictionary API](https://dictionaryapi.dev/)`)
+        );
+
+    const container = containerProp || new ContainerBuilder();
+    if (!containerProp) container.setAccentColor(0x0074D9);
+    container
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')))
+
+    if (Array.isArray(data.sourceUrls) && data.sourceUrls.length > 0) {
+        const sourceButtons = data.sourceUrls.slice(0, 3).map((url, i) =>
+            new ButtonBuilder()
+                .setStyle(ButtonStyle.Link)
+                .setLabel(data.sourceUrls.length === 1 ? t('common:source') : `${t('common:source')} ${i + 1}`)
+                .setURL(url)
+        );
+        const sourceRow = new ActionRowBuilder().addComponents(...sourceButtons);
+        container.addActionRowComponents(sourceRow);
+    }
+
+    return container;
+}
+
+async function buildNewsSearchEmbed(news, page, totalPages, query, sessionId, t) {
+    const prevId = `search_ddg_news_prev_${page - 1}_${sessionId}`;
+    const nextId = `search_ddg_news_next_${page + 1}_${sessionId}`;
+
+    const orderedContent = [];
+
+    if (news.source) {
+        orderedContent.push(`-# 🔗 **${t('common:source')}:** ${news.source}`);
+    }
+
+    if (news.date) {
+        try {
+            const timestamp = typeof news.date === 'number' ? news.date : Math.floor(new Date(news.date).getTime() / 1000);
+            if (!isNaN(timestamp)) {
+                orderedContent.push(`-# 📅 **${t('commands:search.news.published')}:** <t:${timestamp}:R>`);
+            }
+        } catch { }
+    }
+
+    if (news.syndicate) {
+        orderedContent.push(`-# 🔗 **${t('commands:search.news.syndicate')}:** ${news.syndicate}`);
+    }
+
+    if (news.excerpt || news.body) {
+        orderedContent.push('');
+        const excerpt = news.excerpt || news.body;
+        orderedContent.push(funcs.decodeHtmlEntities(excerpt.slice(0, 800)));
+    }
+
+    const engineLogo = 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/duckduckgo-icon.png';
+    let thumbnailUrl = engineLogo;
+    let mediaGallery = null;
+
+    if (news.image) {
+        const info = await funcs.getImageInfo(news.image);
+        if (info.isValid) {
+            const width = news.width || news.imageWidth || news.ImageWidth || news.image_width || info.width;
+            const height = news.height || news.imageHeight || news.ImageHeight || news.image_height || info.height;
+
+            if (width && height && width > height) {
+                try {
+                    mediaGallery = new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL(news.image).setDescription(news.title?.slice(0, 100) || 'News image')
+                    );
+                } catch (err) {
+                    logger.debug(`[DDG News] Failed to create gallery: ${err.message}`);
+                }
+                thumbnailUrl = engineLogo;
+            } else {
+                thumbnailUrl = news.image;
+            }
+        }
+    }
+
+    if (thumbnailUrl === engineLogo && news.url) {
+        try {
+            const domain = new URL(news.url).hostname;
+            const domainLogoUrl = `https://logo.clearbit.com/${domain}`;
+            if (await funcs.isImageUrl(domainLogoUrl)) {
+                thumbnailUrl = domainLogoUrl;
+            }
+        } catch { }
+    }
+
+    const section = new SectionBuilder()
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailUrl))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`## 📰 ${funcs.decodeHtmlEntities(news.title.slice(0, 200))}`),
+            new TextDisplayBuilder().setContent(`-# 🔗 [DuckDuckGo News](https://duckduckgo.com/?q=${encodeURIComponent(query)}&iar=news&ia=news)`)
+        );
+
+    const actionRowButtons = [
+        new ButtonBuilder()
+            .setStyle(ButtonStyle.Secondary)
+            .setLabel(t('common:pagination.prev'))
+            .setCustomId(prevId)
+            .setDisabled(page === 1),
+        new ButtonBuilder()
+            .setStyle(ButtonStyle.Secondary)
+            .setLabel(t('common:pagination.next'))
+            .setCustomId(nextId)
+            .setDisabled(page === totalPages)
+    ];
+
+    if (news.url) {
+        const newsUrlTruncated = news.url.length > 512 ? news.url.substring(0, 509) + '...' : news.url;
+        actionRowButtons.push(
+            new ButtonBuilder()
+                .setStyle(ButtonStyle.Link)
+                .setLabel(t('commands:search.news.read_article'))
+                .setURL(newsUrlTruncated)
+        );
+    }
+
+    if (news.relatedStories && news.relatedStories.length > 0 && news.relatedStories[0].url) {
+        const relatedUrl = news.relatedStories[0].url;
+        const relatedUrlTruncated = relatedUrl.length > 512 ? relatedUrl.substring(0, 509) + '...' : relatedUrl;
+        actionRowButtons.push(
+            new ButtonBuilder()
+                .setStyle(ButtonStyle.Link)
+                .setLabel(t('commands:search.news.related'))
+                .setURL(relatedUrlTruncated)
+        );
+    }
+
+    const actionRow = new ActionRowBuilder().addComponents(...actionRowButtons.slice(0, 5));
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x1E88E5)
+        .addSectionComponents(section)
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(orderedContent.join('\n')));
+
+    if (mediaGallery) {
+        container.addMediaGalleryComponents(mediaGallery);
+    }
+
+    container
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('common:pagination.page_of', { current: page, total: totalPages })}`))
+        .addActionRowComponents(actionRow);
+
+    return container;
+}
+
+function formatDuration(seconds) {
+    if (typeof seconds !== 'number' || isNaN(seconds)) return '?';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+        return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 async function filterQuery(query) {
     try {
@@ -1385,24 +2173,140 @@ async function filterQuery(query) {
     }
 }
 
-async function handleDuckDuckGo(interaction, query, page = 1, profanityDetected = false, isPagination = false, sessionId = null, t) {
+async function getSpecialSearchComponent(queryUser, t) {
+    const queryType = ddg.detectQueryType(queryUser);
+    if (!queryType.type || queryType.type === 'search') return null;
+
+    let builder = null;
+
+    try {
+        if (queryType.type === 'weather') {
+            const forecast = await ddg.ddgForecast(queryType.params.location);
+            if (forecast) builder = (c) => buildForecastEmbed(forecast, queryType.params.location, t, c);
+        } else if (queryType.type === 'stocks') {
+            const stock = await ddg.ddgStocks(queryType.params.symbol);
+            if (stock && stock.Last != null) builder = (c) => buildStocksEmbed(stock, queryType.params.symbol, t, c);
+        } else if (queryType.type === 'time') {
+            const timeResult = await ddg.ddgTime(queryType.params.location);
+            if (timeResult && timeResult.locations && timeResult.locations.length > 0) {
+                builder = (c) => buildTimeEmbed(timeResult, queryType.params.location, t, c);
+            }
+        } else if (queryType.type === 'currency') {
+            const { from, to, amount } = queryType.params;
+            const currencyResult = await ddg.ddgCurrency(from, to, amount);
+            if (currencyResult && currencyResult.conversion) {
+                builder = (c) => buildCurrencyEmbed(currencyResult, from, to, amount, t, c);
+            }
+        } else if (queryType.type === 'coinflip') {
+            builder = (c) => buildCoinflipEmbed(t, c);
+        } else if (queryType.type === 'dictionary') {
+            const word = queryType.params.word;
+            const apiUrl = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
+            try {
+                const response = await axios.get(apiUrl);
+                const data = response.data[0];
+                if (data) builder = (c) => buildDictionaryEmbed(data, word, t, c);
+
+            } catch { }
+        } else if (queryType.type === 'expand_url') {
+            const result = await ddg.ddgExpandUrl(queryType.params.url);
+            if (result && (result.success || result.resolved_url)) {
+
+                const requested = queryType.params.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+                const resolved = (result.resolved_url || result.url || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+
+                if (requested === resolved && !result.malicious) {
+                    logger.debug(`[SS] Expand URL: Requested and resolved are same ("${requested}"), skipping special page.`);
+                    return null;
+                }
+
+                const data = {
+                    requested_url: queryType.params.url,
+                    resolved_url: result.resolved_url || result.url
+                };
+
+                const safetyRequested = await funcs.checkUrlSafety(data.requested_url);
+                const safetyResolved = await funcs.checkUrlSafety(data.resolved_url);
+
+                if (safetyRequested.error === 403 || safetyResolved.error === 403) {
+                    logger.warn(`[SS] URL Safety API returned 403, skipping expansion page for safety.`);
+                    return null;
+                }
+
+                data.isSafe = safetyRequested.safe && safetyResolved.safe;
+                data.safetyReason = !safetyRequested.safe ? safetyRequested.reason : safetyResolved.reason;
+
+                if (result.safety) {
+                    data.service_safety_info = result.safety;
+                } else if (result.malicious) {
+                    data.service_safety_info = `Flagged as malicious by expansion service.`;
+                    data.isSafe = false;
+                }
+
+                builder = (c) => buildExpandUrlEmbed(data, queryType.params.url, t, c);
+            } else {
+                logger.debug(`[SS] Expand URL failed for ${queryType.params.url}: ${result ? result.error : 'Unknown error'}`);
+            }
+        } else if (queryType.type === 'emojipedia') {
+            const data = await ddg.ddgEmojipedia(queryType.params.emoji);
+            if (data) {
+                builder = (c) => buildEmojipediaEmbed(data, queryType.params.emoji, t, c);
+            }
+        }
+    } catch (err) {
+        logger.error(`[SS] Error processing ${queryType.type}: ${err.message}`);
+    }
+
+    if (builder) return { builder, isBlocking: false };
+    return null;
+}
+
+async function handleDuckDuckGo(interaction, query, page = 1, profanityDetected = false, isPagination = false, sessionId = null, t, specialBuilderFromCache = null) {
     const userId = interaction.user.id;
     const sid = sessionId || makeSessionId('ddg', query, userId);
     let results, totalPages;
+    let specialBuilder = specialBuilderFromCache;
+
     if (!isPagination) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
-        const apiUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1&kp=1&safe=active`;
-        const response = await axios.get(apiUrl);
-        const data = response.data;
-        results = parseDuckDuckGoResults(data, query).slice(0, 30);
-        if (profanityDetected && results.length && results[0].isAbstract) {
-            results = results.slice(1);
+
+        if (!specialBuilder) {
+            const special = await getSpecialSearchComponent(query, t);
+            if (special) {
+                if (special.isBlocking) {
+                    await interaction.editReply({ components: [special.component], flags: MessageFlags.IsComponentsV2 });
+                    return;
+                }
+                specialBuilder = special.builder;
+            }
         }
+
+        logger.debug(`[DDG] Using JSON API for: "${query}"`);
+        try {
+            const apiUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1&kp=1&safe=active`;
+            const response = await axios.get(apiUrl);
+            const data = response.data;
+            results = parseDuckDuckGoResults(data, query).slice(0, 30);
+            if (profanityDetected && results.length && results[0].isAbstract) {
+                results = results.slice(1);
+            }
+            logger.info(`[DDG] JSON API returned ${results.length} results`);
+        } catch (error) {
+            logger.error(`[DDG] JSON API failed: ${error.message}`);
+            return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_error', { engine: 'DuckDuckGo' })}` });
+        }
+
         if (!results.length) {
+            if (specialBuilder) {
+                const container = new ContainerBuilder().setAccentColor(0x4756ff);
+                specialBuilder(container);
+                return interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            }
             return interaction.editReply({ content: `${e.not_found} ${t('common:no_results')}` });
         }
         totalPages = results.length;
-        setPaginationCache(sid, results, { query, totalPages }, userId);
+        if (specialBuilder) totalPages++;
+        setPaginationCache(sid, results, { query, totalPages, source: 'json', specialBuilder }, userId);
     } else {
         const cache = getPaginationCache(sid);
         if (!cache) {
@@ -1414,10 +2318,84 @@ async function handleDuckDuckGo(interaction, query, page = 1, profanityDetected 
         }
         results = cache.results;
         totalPages = cache.meta.totalPages;
+        specialBuilder = cache.meta.specialBuilder;
         await interaction.deferUpdate();
     }
+
+    if (specialBuilder) {
+        if (page === 1) {
+            const container = new ContainerBuilder().setAccentColor(0x4756ff);
+            specialBuilder(container);
+
+            const ddgNextId = `search_ddg_next_2_${sid}`;
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.prev')).setCustomId(`search_ddg_prev_0_${sid}`).setDisabled(true),
+                new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.next')).setCustomId(ddgNextId).setDisabled(totalPages <= 1)
+            );
+            container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
+            if (totalPages === 1) {
+                container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - Search`));
+            } else {
+                container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('common:pagination.page_of', { current: 1, total: totalPages })}`));
+            }
+            container.addActionRowComponents(actionRow);
+
+            await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            return;
+        }
+        const index = page - 2;
+        const searchComponent = await buildDuckDuckGoComponent(results[index], page, totalPages, interaction.client, query, sid, t);
+        await interaction.editReply({ components: [searchComponent], flags: MessageFlags.IsComponentsV2 });
+        return;
+    }
+
     const currentPage = Math.max(1, Math.min(page, totalPages));
-    const component = await buildDuckDuckGoComponent(results[currentPage - 1], currentPage, totalPages, interaction.client, query, sid, t);
+    const searchComponent = await buildDuckDuckGoComponent(results[currentPage - 1], currentPage, totalPages, interaction.client, query, sid, t);
+
+    await interaction.editReply({ components: [searchComponent], flags: MessageFlags.IsComponentsV2 });
+}
+
+async function handleDDGNews(interaction, query, page = 1, isPagination = false, sessionId = null, t) {
+    const userId = interaction.user.id;
+    const sid = sessionId || makeSessionId('ddg_news', query, userId);
+    let results, totalPages;
+
+    if (!isPagination) {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+
+        try {
+            logger.debug(`[DDG News] Searching for: "${query}"`);
+            const newsResults = await ddg.ddgSearchNews(query);
+
+            if (!newsResults || newsResults.noResults || !newsResults.results || newsResults.results.length === 0) {
+                return interaction.editReply({ content: `${e.not_found} ${t('common:no_results')}` });
+            }
+
+            results = newsResults.results.slice(0, 25);
+            totalPages = results.length;
+            setPaginationCache(sid, results, { query, totalPages, type: 'ddg_news' }, userId);
+            logger.info(`[DDG News] Found ${results.length} news articles for "${query}"`);
+        } catch (error) {
+            logger.error(`[DDG News] Error: ${error.message}`);
+            return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_error', { engine: 'DuckDuckGo News' })}` });
+        }
+    } else {
+        const cache = getPaginationCache(sid);
+        if (!cache) {
+            await interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+            return;
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        results = cache.results;
+        totalPages = cache.meta.totalPages;
+        query = cache.meta.query;
+        await interaction.deferUpdate();
+    }
+
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+    const component = await buildNewsSearchEmbed(results[currentPage - 1], currentPage, totalPages, query, sid, t);
     await interaction.editReply({ components: [component], flags: MessageFlags.IsComponentsV2 });
 }
 
@@ -1459,24 +2437,44 @@ async function handleAllLinks(interaction, query, realQuery, t) {
     await interaction.reply({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 }
 
-async function handleSerpApiEngine(interaction, query, engineName, color, emoji, page = 1, safeQuery = null, profanityDetected = false, isPagination = false, sessionId = null, t) {
+async function handleSerpApiEngine(interaction, query, engineName, color, emoji, page = 1, safeQuery = null, profanityDetected = false, isPagination = false, sessionId = null, t, specialBuilderFromCache = null) {
     const userId = interaction.user.id;
     const sid = sessionId || makeSessionId(engineName, query, userId);
     let items, totalPages;
+    let specialBuilder = specialBuilderFromCache;
+
     if (!safeQuery) safeQuery = query;
     if (!isPagination) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (!specialBuilder) {
+            const special = await getSpecialSearchComponent(query, t);
+            if (special) {
+                if (special.isBlocking) {
+                    await interaction.editReply({ components: [special.component], flags: MessageFlags.IsComponentsV2 });
+                    return;
+                }
+                specialBuilder = special.builder;
+            }
+        }
+
         if (engineName === 'google') {
             try {
                 const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(query)}&safe=active&num=10`;
                 const response = await axios.get(apiUrl);
                 items = (response.data.items || []).slice(0, 30);
                 if (!items.length) {
+                    if (specialBuilder) {
+                        const container = new ContainerBuilder().setAccentColor(0x4756ff);
+                        specialBuilder(container);
+                        return interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+                    }
                     await interaction.editReply({ content: `${e.not_found} ${t('common:no_results')}` });
                     return;
                 }
                 totalPages = items.length;
-                setPaginationCache(sid, items, { query, totalPages }, userId);
+                if (specialBuilder) totalPages++;
+                setPaginationCache(sid, items, { query, totalPages, specialBuilder }, userId);
             } catch (error) {
                 let errMsg = error?.response?.data?.error?.message || error?.message || String(error);
                 if (errMsg.includes('API key') || errMsg.includes('invalid') || errMsg.includes('quota')) {
@@ -1499,11 +2497,10 @@ async function handleSerpApiEngine(interaction, query, engineName, color, emoji,
                     params = { engine: engineName, q: query, num: 30, safeSearch: 'strict', api_key: process.env.SERPAPI_KEY || SERPAPI_KEY };
                 } else if (engineName === 'yahoo') {
                     params = { engine: engineName, p: query, num: 30, vm: 'r', api_key: process.env.SERPAPI_KEY || SERPAPI_KEY };
-                } else if (engineName === 'yandex') { //DISABLED!!!!
-                    params = { engine: engineName, text: query, num: 30, safe: 'active', api_key: process.env.SERPAPI_KEY || SERPAPI_KEY };
                 } else {
                     params = { engine: engineName, text: query, num: 30, safe: 'active', api_key: process.env.SERPAPI_KEY || SERPAPI_KEY };
                 }
+
                 let serpApiError = null;
                 await new Promise((resolve) => {
                     getJson(params, async (result, err) => {
@@ -1513,11 +2510,18 @@ async function handleSerpApiEngine(interaction, query, engineName, color, emoji,
                         }
                         items = (result && result.organic_results && Array.isArray(result.organic_results)) ? result.organic_results.slice(0, 30) : [];
                         if (!items.length) {
-                            await interaction.editReply({ content: `${e.not_found} ${t('common:no_results')}` });
+                            if (specialBuilder) {
+                                const container = new ContainerBuilder().setAccentColor(0x4756ff);
+                                specialBuilder(container);
+                                return interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+                            } else {
+                                await interaction.editReply({ content: `${e.not_found} ${t('common:no_results')}` });
+                            }
                             return resolve();
                         }
                         totalPages = items.length;
-                        setPaginationCache(sid, items, { query, totalPages }, userId);
+                        if (specialBuilder) totalPages++;
+                        setPaginationCache(sid, items, { query, totalPages, specialBuilder }, userId);
                         resolve();
                     });
                 });
@@ -1525,6 +2529,7 @@ async function handleSerpApiEngine(interaction, query, engineName, color, emoji,
                     await interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_unavailable_error', { engine: engineName.charAt(0).toUpperCase() + engineName.slice(1), error: serpApiError })}` });
                     return;
                 }
+                if (!items.length) return;
             } catch (err) {
                 await interaction.editReply({ content: `${e.pixel_cross} ${t('commands:search.search_unavailable', { engine: engineName.charAt(0).toUpperCase() + engineName.slice(1) })}` });
                 return;
@@ -1541,36 +2546,60 @@ async function handleSerpApiEngine(interaction, query, engineName, color, emoji,
         }
         items = cache.results;
         totalPages = cache.meta.totalPages;
+        specialBuilder = cache.meta.specialBuilder;
         await interaction.deferUpdate();
     }
     const currentPage = Math.max(1, Math.min(page, totalPages));
-    let res, domain, logoUrl;
-    if (engineName === 'google') {
-        res = items[currentPage - 1];
-        try {
-            domain = new URL(res.link).hostname;
-            logoUrl = await getLogoUrl(domain);
-        } catch {
-            domain = 'google.com';
-            logoUrl = '';
+    let res;
+
+    if (specialBuilder) {
+        if (page === 1) {
+            const container = new ContainerBuilder().setAccentColor(color || 0x4756ff);
+            specialBuilder(container);
+
+            const nextId = `search_${engineName}_next_2_${sid}`;
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.prev')).setCustomId(`search_${engineName}_prev_0_${sid}`).setDisabled(true),
+                new ButtonBuilder().setStyle(ButtonStyle.Secondary).setLabel(t('common:pagination.next')).setCustomId(nextId).setDisabled(totalPages <= 1)
+            );
+            container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
+            if (totalPages === 1) {
+                container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - Search`));
+            } else {
+                container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('common:pagination.page_of', { current: 1, total: totalPages })}`));
+            }
+            container.addActionRowComponents(actionRow);
+
+            await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            return;
         }
-        const component = await buildSerpApiComponent(res, currentPage, totalPages, engineName, color, emoji, query, logoUrl, domain, profanityDetected, sid, t);
-        await interaction.editReply({ components: [component], flags: MessageFlags.IsComponentsV2 });
-        return;
+        res = items[page - 2];
     } else {
         res = items[currentPage - 1];
+    }
+    let domain, logoUrl;
+
+    if (engineName === 'google') {
         try {
             domain = new URL(res.link).hostname;
-            logoUrl = await getLogoUrl(domain);
+            logoUrl = await funcs.getLogoUrl(domain);
         } catch {
-            domain = engineName + '.com';
-            logoUrl = null;
+            if (!domain) domain = 'google.com';
+            logoUrl = '';
+        }
+    } else {
+        try {
+            domain = new URL(res.link).hostname;
+            logoUrl = await funcs.getLogoUrl(domain);
+        } catch {
+            if (!domain) domain = engineName + '.com';
+            logoUrl = '';
         }
         if (!logoUrl) logoUrl = '';
-        const component = await buildSerpApiComponent(res, currentPage, totalPages, engineName, color, emoji, query, logoUrl, domain, profanityDetected, sid, t);
-        await interaction.editReply({ components: [component], flags: MessageFlags.IsComponentsV2 });
-        return;
     }
+
+    const component = await buildSerpApiComponent(res, currentPage, totalPages, engineName, color, emoji, query, logoUrl, domain, profanityDetected, sid, t, specialBuilder);
+    await interaction.editReply({ components: [component], flags: MessageFlags.IsComponentsV2 });
 }
 
 async function handleSearchPagination(interaction, t) {
@@ -1596,7 +2625,8 @@ async function handleSearchPagination(interaction, t) {
         }
         const safeQuery = cache.meta.query;
         const profanityDetected = false; //ALREADY FILTERED !!
-        await handleDuckDuckGo(interaction, safeQuery, page, profanityDetected, true, sessionId, t);
+        const specialBuilder = cache.meta.specialBuilder;
+        await handleDuckDuckGo(interaction, safeQuery, page, profanityDetected, true, sessionId, t, specialBuilder);
         return;
     } else if (serpMatch) {
         const [, engine, direction, pageStr, sessionIdRaw] = serpMatch;
@@ -1616,11 +2646,54 @@ async function handleSearchPagination(interaction, t) {
         }
         const safeQuery = cache.meta.query;
         const profanityDetected = false;
+        const specialBuilder = cache.meta.specialBuilder;
         await handleSerpApiEngine(interaction, safeQuery, engine,
             engine === 'google' ? 0x4285F4 : engine === 'bing' ? 0x00809D : engine === 'yahoo' ? 0x720E9E : 0xFF0000,
             engine === 'google' ? e.icon_google : engine === 'bing' ? e.icon_bing : engine === 'yahoo' ? e.icon_yahoo : e.forum,
-            page, safeQuery, profanityDetected, true, sessionId, t
+            page, safeQuery, profanityDetected, true, sessionId, t, specialBuilder
         );
+        return;
+    }
+
+    const ddgImgMatch = id.match(/^search_ddg_img_(prev|next)_(\d+)_(.+)$/);
+    if (ddgImgMatch) {
+        const [, direction, pageStr, sessionIdRaw] = ddgImgMatch;
+        sessionId = sessionIdRaw;
+        page = Math.max(1, parseInt(pageStr, 10));
+        if (isPaginationExpired(sessionId)) {
+            await interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+            return;
+        }
+        const cache = getPaginationCache(sessionId);
+        if (!cache) {
+            await interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+            return;
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        await handleDDGImages(interaction, cache.meta.query, page, true, sessionId, t);
+        return;
+    }
+
+    const ddgNewsMatch = id.match(/^search_ddg_news_(prev|next)_(\d+)_(.+)$/);
+    if (ddgNewsMatch) {
+        const [, direction, pageStr, sessionIdRaw] = ddgNewsMatch;
+        sessionId = sessionIdRaw;
+        page = Math.max(1, parseInt(pageStr, 10));
+        if (isPaginationExpired(sessionId)) {
+            await interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+            return;
+        }
+        const cache = getPaginationCache(sessionId);
+        if (!cache) {
+            await interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.expired')}`, flags: MessageFlags.Ephemeral });
+            return;
+        }
+        if (interaction.user.id !== cache.userId) {
+            return interaction.reply({ content: `${e.pixel_cross} ${t('common:pagination.only_user')}`, flags: MessageFlags.Ephemeral });
+        }
+        await handleDDGNews(interaction, cache.meta.query, page, true, sessionId, t);
         return;
     }
 
@@ -1671,14 +2744,14 @@ module.exports = {
         .setNameLocalizations(commandMeta.search.name)
         .setDescription('Search the web')
         .setDescriptionLocalizations(commandMeta.search.description)
-        .addSubcommand(sub => sub.setName('duckduckgo').setNameLocalizations(commandMeta.search.duckduckgo_name).setDescription('Search DuckDuckGo').setDescriptionLocalizations(commandMeta.search.duckduckgo_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
-        .addSubcommand(sub => sub.setName('google').setNameLocalizations(commandMeta.search.google_name).setDescription('Search Google').setDescriptionLocalizations(commandMeta.search.google_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
-        .addSubcommand(sub => sub.setName('bing').setNameLocalizations(commandMeta.search.bing_name).setDescription('Search Bing').setDescriptionLocalizations(commandMeta.search.bing_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
-        .addSubcommand(sub => sub.setName('yahoo').setNameLocalizations(commandMeta.search.yahoo_name).setDescription('Search Yahoo').setDescriptionLocalizations(commandMeta.search.yahoo_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
+        .addSubcommand(sub => sub.setName('duckduckgo').setNameLocalizations(commandMeta.search.duckduckgo_name).setDescription('Search DuckDuckGo').setDescriptionLocalizations(commandMeta.search.duckduckgo_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true).setAutocomplete(true)))
+        .addSubcommand(sub => sub.setName('google').setNameLocalizations(commandMeta.search.google_name).setDescription('Search Google').setDescriptionLocalizations(commandMeta.search.google_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true).setAutocomplete(true)))
+        .addSubcommand(sub => sub.setName('bing').setNameLocalizations(commandMeta.search.bing_name).setDescription('Search Bing').setDescriptionLocalizations(commandMeta.search.bing_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true).setAutocomplete(true)))
+        .addSubcommand(sub => sub.setName('yahoo').setNameLocalizations(commandMeta.search.yahoo_name).setDescription('Search Yahoo').setDescriptionLocalizations(commandMeta.search.yahoo_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true).setAutocomplete(true)))
         //.addSubcommand(sub => sub.setName('yandex').setNameLocalizations(commandMeta.search.yandex_name).setDescription('Search Yandex').setDescriptionLocalizations(commandMeta.search.yandex_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
         .addSubcommand(sub => sub.setName('wikipedia').setNameLocalizations(commandMeta.search.wikipedia_name || {}).setDescription('Search Wikipedia').setDescriptionLocalizations(commandMeta.search.wikipedia_description || {}).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true).setAutocomplete(true)))
         .addSubcommand(sub => sub.setName('stackoverflow').setNameLocalizations(commandMeta.search.stackoverflow_name || {}).setDescription('Search StackOverflow').setDescriptionLocalizations(commandMeta.search.stackoverflow_description || {}).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true)))
-
+        .addSubcommand(sub => sub.setName('news').setDescription('Search DuckDuckGo News').addStringOption(opt => opt.setName('query').setDescription('News search query').setRequired(true)))
         .addSubcommand(sub => sub.setName('queries').setNameLocalizations(commandMeta.search.queries_name).setDescription('Get links to all search engines').setDescriptionLocalizations(commandMeta.search.queries_description).addStringOption(opt => opt.setName('query').setNameLocalizations(commandMeta.search.option_query_name || {}).setDescription('Query').setDescriptionLocalizations(commandMeta.search.option_query_description || {}).setRequired(true))),
     integration_types: [0, 1],
     contexts: [0, 1, 2],
@@ -1711,6 +2784,8 @@ module.exports = {
             await handleWikipedia(interaction, safeQuery, 1, false, null, t);
         } else if (sub === 'stackoverflow') {
             await handleStackOverflow(interaction, safeQuery, 1, false, null, t);
+        } else if (sub === 'news') {
+            await handleDDGNews(interaction, safeQuery, 1, false, null, t);
 
         } else {
             if (interaction.deferred || interaction.replied) {
@@ -1744,12 +2819,20 @@ module.exports = {
                 }
 
                 try {
-                    const suggestions = await getWikipediaAutocomplete(query, interaction.user.id);
-                    logger.debug(`[Autocomplete] Got ${suggestions.length} suggestions`);
+                    const sub = interaction.options.getSubcommand();
+                    let suggestions = [];
+
+                    if (['duckduckgo', 'google', 'bing', 'yahoo'].includes(sub)) {
+                        suggestions = await getDdgAutocomplete(query, interaction.user.id);
+                    } else if (sub === 'wikipedia') {
+                        suggestions = await getWikipediaAutocomplete(query, interaction.user.id);
+                    }
+
+                    logger.debug(`[Autocomplete] Got ${suggestions.length} suggestions for ${sub}`);
                     const choices = suggestions.slice(0, 25).map(s => ({ name: s, value: s }));
                     return await interaction.respond(choices);
                 } catch (err) {
-                    logger.error('[Autocomplete] Error in getWikipediaAutocomplete:', err);
+                    logger.error('[Autocomplete] Error in getting suggestions:', err);
                     logger.debug('[Autocomplete] Full error details:', err);
                     return await interaction.respond([]);
                 }
@@ -1769,3 +2852,5 @@ module.exports = {
     handleSearchPagination,
     filterQuery
 };
+
+// contributors: @relentiousdragon

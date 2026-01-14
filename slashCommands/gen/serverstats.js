@@ -21,13 +21,6 @@ function clearStatsCache(guildId) {
     statsCache.delete(guildId);
 }
 
-function formatDuration(seconds) {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-    return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
-}
-
 async function getMessageStats(guildId, days = 7) {
     const stats = await ServerStats.findOne({ guildId });
     if (!stats?.messageStats?.length) return null;
@@ -187,24 +180,30 @@ async function getMemberSegments(guild, guildId, days = 7) {
     const recentStats = stats.messageStats.filter(s => s.date >= cutoff);
 
     const activeUserIds = [...new Set(recentStats.map(s => s.userId))];
+    if (activeUserIds.length === 0) return null;
 
     let newMembersCount = 0;
     let veteranMembersCount = 0;
     let regularMembersCount = 0;
 
-    for (const uid of activeUserIds) {
-        try {
-            const member = await guild.members.fetch(uid).catch(() => null);
+    try {
+        const members = await guild.members.fetch({ user: activeUserIds });
+
+        for (const uid of activeUserIds) {
+            const member = members.get(uid);
             if (!member) continue;
 
             const joinDate = member.joinedAt;
             const now = new Date();
             const daysSinceJoin = (now - joinDate) / (1000 * 60 * 60 * 24);
 
-            if (daysSinceJoin < 7) newMembersCount += getUserMessageCount(recentStats, uid);
-            else if (daysSinceJoin > 90) veteranMembersCount += getUserMessageCount(recentStats, uid);
-            else regularMembersCount += getUserMessageCount(recentStats, uid);
-        } catch (e) { }
+            const msgCount = getUserMessageCount(recentStats, uid);
+            if (daysSinceJoin < 7) newMembersCount += msgCount;
+            else if (daysSinceJoin > 90) veteranMembersCount += msgCount;
+            else regularMembersCount += msgCount;
+        }
+    } catch (e) {
+        logger.error(`[ServerStats] Bulk member fetch failed: ${e.message}`);
     }
 
     return { newMembersCount, veteranMembersCount, regularMembersCount };
@@ -273,18 +272,26 @@ module.exports = {
         .setDescriptionLocalizations(commandMeta.serverstats?.description || {})
         .addSubcommand(sub =>
             sub.setName("enable")
+                .setNameLocalizations(commandMeta.serverstats?.enable_name || {})
                 .setDescription("Enable server stats tracking (Admin only)")
+                .setDescriptionLocalizations(commandMeta.serverstats?.enable_description || {})
         )
         .addSubcommand(sub =>
             sub.setName("disable")
+                .setNameLocalizations(commandMeta.serverstats?.disable_name || {})
                 .setDescription("Disable server stats tracking (Admin only)")
+                .setDescriptionLocalizations(commandMeta.serverstats?.disable_description || {})
         )
         .addSubcommand(sub =>
             sub.setName("overview")
+                .setNameLocalizations(commandMeta.serverstats?.overview_name || {})
                 .setDescription("View server stats overview with message graph")
+                .setDescriptionLocalizations(commandMeta.serverstats?.overview_description || {})
                 .addIntegerOption(opt =>
                     opt.setName("days")
+                        .setNameLocalizations(commandMeta.serverstats?.option_days_name || {})
                         .setDescription("Number of days to show (7, 14, or 30)")
+                        .setDescriptionLocalizations(commandMeta.serverstats?.option_days_description || {})
                         .addChoices(
                             { name: "7 days", value: 7 },
                             { name: "14 days", value: 14 },
@@ -294,27 +301,39 @@ module.exports = {
         )
         .addSubcommand(sub =>
             sub.setName("activity")
+                .setNameLocalizations(commandMeta.serverstats?.activity_name || {})
                 .setDescription("View peak hours and activity patterns")
+                .setDescriptionLocalizations(commandMeta.serverstats?.activity_description || {})
         )
         .addSubcommand(sub =>
             sub.setName("voice")
+                .setNameLocalizations(commandMeta.serverstats?.voice_name || {})
                 .setDescription("View voice channel activity leaderboard")
+                .setDescriptionLocalizations(commandMeta.serverstats?.voice_description || {})
         )
         .addSubcommand(sub =>
             sub.setName("invites")
+                .setNameLocalizations(commandMeta.serverstats?.invites_name || {})
                 .setDescription("View invite tracking leaderboard")
+                .setDescriptionLocalizations(commandMeta.serverstats?.invites_description || {})
         )
         .addSubcommand(sub =>
             sub.setName("export")
+                .setNameLocalizations(commandMeta.serverstats?.export_name || {})
                 .setDescription("Export server stats")
+                .setDescriptionLocalizations(commandMeta.serverstats?.export_description || {})
                 .addStringOption(opt =>
                     opt.setName("format")
+                        .setNameLocalizations(commandMeta.serverstats?.export_option_format_name || {})
                         .setDescription("File format")
+                        .setDescriptionLocalizations(commandMeta.serverstats?.export_option_format_description || {})
                         .addChoices({ name: "CSV", value: "csv" }, { name: "JSON", value: "json" })
                 )
                 .addChannelOption(opt =>
                     opt.setName("channel")
+                        .setNameLocalizations(commandMeta.serverstats?.export_option_channel_name || {})
                         .setDescription("Channel for auto-export (Every 30d)")
+                        .setDescriptionLocalizations(commandMeta.serverstats?.export_option_channel_description || {})
                         .addChannelTypes(0)
                 )
         ),
@@ -436,7 +455,7 @@ module.exports = {
                     .slice(0, MAX_ENTRIES)
                     .map(([channelId, seconds]) => {
                         const ch = interaction.guild.channels.cache.get(channelId);
-                        return { channelId, name: ch?.name || 'Unknown', totalSeconds: seconds, formatted: formatDuration(seconds) };
+                        return { channelId, name: ch?.name || 'Unknown', totalSeconds: seconds, formatted: funcs.formatDurationPretty(seconds * 1000, { maxUnit: 'd', excludeWeeks: true }) };
                     });
 
                 const voiceUserMap = new Map();
@@ -446,7 +465,7 @@ module.exports = {
                 const voiceByUser = [...voiceUserMap.entries()]
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, MAX_ENTRIES)
-                    .map(([userId, seconds]) => ({ userId, totalSeconds: seconds, formatted: formatDuration(seconds) }));
+                    .map(([userId, seconds]) => ({ userId, totalSeconds: seconds, formatted: funcs.formatDurationPretty(seconds * 1000, { maxUnit: 'd', excludeWeeks: true }) }));
 
                 const exportData = {
                     _meta: {
@@ -465,7 +484,7 @@ module.exports = {
                     summary: {
                         totalMessages: userStats.reduce((a, b) => a + b.messages, 0),
                         totalVoiceSeconds: voiceByUser.reduce((a, b) => a + b.totalSeconds, 0),
-                        totalVoiceFormatted: formatDuration(voiceByUser.reduce((a, b) => a + b.totalSeconds, 0)),
+                        totalVoiceFormatted: funcs.formatDurationPretty(voiceByUser.reduce((a, b) => a + b.totalSeconds, 0) * 1000, { maxUnit: 'd', excludeWeeks: true }),
                         allTimeVoiceMinutes: stats.allTimeVoiceMinutes || 0,
                         topChannelsCount: channelStats.length,
                         topUsersCount: userStats.length
@@ -602,6 +621,32 @@ module.exports = {
                 });
             }
 
+            if (subcommand === 'overview') {
+                const COOLDOWN_OVERVIEW = 180000;
+                if (serverData.serverStatsOverviewLastUpdate) {
+                    const diff = Date.now() - serverData.serverStatsOverviewLastUpdate;
+                    if (diff < COOLDOWN_OVERVIEW) {
+                        const nextUpdate = Math.floor((serverData.serverStatsOverviewLastUpdate + COOLDOWN_OVERVIEW) / 1000);
+                        return interaction.reply({
+                            content: t("commands:serverstats.cooldown", { time: `<t:${nextUpdate}:R>` }),
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
+                }
+            } else if (subcommand === 'activity') {
+                const COOLDOWN_ACTIVITY = 60000;
+                if (serverData.serverStatsActivityLastUpdate) {
+                    const diff = Date.now() - serverData.serverStatsActivityLastUpdate;
+                    if (diff < COOLDOWN_ACTIVITY) {
+                        const nextUpdate = Math.floor((serverData.serverStatsActivityLastUpdate + COOLDOWN_ACTIVITY) / 1000);
+                        return interaction.reply({
+                            content: t("commands:serverstats.cooldown", { time: `<t:${nextUpdate}:R>` }),
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
+                }
+            }
+
             await interaction.reply({ content: `${e.loading} ${t("common:loading")}` });
 
             if (subcommand === 'overview') {
@@ -649,7 +694,11 @@ module.exports = {
                 const trend = await calculateTrend(guildId, 7);
                 if (trend) {
                     const sign = trend.direction === 'up' ? '+' : '-';
-                    const trendText = trend.isStable ? t('commands:serverstats.trend_stable') : `${sign}${trend.percent}%`;
+                    const trendText = trend.isStable
+                        ? t('commands:serverstats.trend_stable')
+                        : (trend.direction === 'up'
+                            ? t('commands:serverstats.trend_up', { percent: trend.percent })
+                            : t('commands:serverstats.trend_down', { percent: trend.percent }));
 
                     let color = graphRenderer.COLORS.textDim;
                     if (!trend.isStable) {
@@ -764,11 +813,13 @@ module.exports = {
                 }
 
                 container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${e.archive} **${t('commands:serverstats.total_messages_ever')}:** ${funcs.abbr(Math.max(fullStats?.totalMessages || 0, msgStats.total))}`))
-                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${e.voice_channnel} **${t('commands:serverstats.all_time_voice')}:** ${formatDuration(allTimeVoiceSeconds)}`))
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${e.voice_channnel} **${t('commands:serverstats.all_time_voice')}:** ${funcs.formatDurationPretty(allTimeVoiceSeconds * 1000, { maxUnit: 'd', excludeWeeks: true })}`))
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                     .addTextDisplayComponents(new TextDisplayBuilder().setContent(statsText))
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                     .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('commands:serverstats.data_from_days', { days })}`));
+
+                await Server.updateOne({ serverID: guildId }, { $set: { serverStatsOverviewLastUpdate: Date.now() } });
 
                 return interaction.editReply({
                     content: null,
@@ -828,6 +879,8 @@ module.exports = {
                     )
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                     .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Waterfall - ${t('commands:serverstats.utc_time')}`));
+
+                await Server.updateOne({ serverID: guildId }, { $set: { serverStatsActivityLastUpdate: Date.now() } });
 
                 return interaction.editReply({ content: null, components: [container], files: [attachment], flags: MessageFlags.IsComponentsV2 });
 
@@ -937,3 +990,5 @@ module.exports = {
         created: 1766491397
     }
 };
+
+// contributors: @relentiousdragon

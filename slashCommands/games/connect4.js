@@ -14,12 +14,17 @@ const { EMPTY, HUMAN, AI, ROWS, COLS } = connect4AI;
 const PLAYER_1 = HUMAN;
 const PLAYER_2 = AI;
 
-const CELL_SIZE = 48;
-const PADDING = 6;
-const COL_NUM_HEIGHT = 30;
-const BOARD_WIDTH = COLS * CELL_SIZE + (COLS + 1) * PADDING;
-const BOARD_HEIGHT = ROWS * CELL_SIZE + (ROWS + 1) * PADDING + COL_NUM_HEIGHT;
-const BALL_RADIUS = (CELL_SIZE / 2) - 3;
+const CELL_SIZE = 72;
+const PADDING = 8;
+const COL_NUM_HEIGHT = 40;
+const BOARD_INNER_WIDTH = COLS * CELL_SIZE + (COLS + 1) * PADDING;
+const BOARD_INNER_HEIGHT = ROWS * CELL_SIZE + (ROWS + 1) * PADDING + COL_NUM_HEIGHT;
+const SIGNATURE_WIDTH = 64;
+const BOARD_WIDTH = BOARD_INNER_WIDTH + SIGNATURE_WIDTH;
+const BOARD_HEIGHT = BOARD_INNER_HEIGHT;
+const BOARD_OFFSET_X = 0;
+const BOARD_OFFSET_Y = 0;
+const BALL_RADIUS = (CELL_SIZE / 2) - 4;
 
 const PLAYER_COLORS = [
     { name: 'Red', hex: '#ff3131', emoji: '🔴' },
@@ -85,23 +90,73 @@ function removeGame(gameId) {
     activeGames.delete(gameId);
 }
 
-async function renderBoard(board, colors, lastMove = null) {
+async function renderBoard(board, colors, lastMove = null, gameId = null) {
     if (lastMove) {
-        return renderAnimatedBoard(board, colors, lastMove);
+        return renderAnimatedBoard(board, colors, lastMove, gameId);
     }
 
     const canvas = Canvas.createCanvas(BOARD_WIDTH, BOARD_HEIGHT);
     const ctx = canvas.getContext('2d');
-    drawFullBoard(ctx, board, colors);
+    drawFullBoard(ctx, board, colors, [], gameId);
     return canvas.toBuffer();
 }
 
-function drawFullBoard(ctx, board, colors, winningCoords = []) {
+function drawSideSignature(ctx, gameId) {
+    if (!gameId) return;
+
+    const startX = BOARD_INNER_WIDTH;
+    const width = SIGNATURE_WIDTH;
+    const height = BOARD_HEIGHT;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(startX, 0, 2, height);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(startX + 2, 0, width - 2, height);
+
+    let hash = 0;
+    for (let i = 0; i < gameId.length; i++) {
+        hash = ((hash << 5) - hash) + gameId.charCodeAt(i);
+        hash |= 0;
+    }
+
+    const seededFunc = (s) => {
+        let t = s += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+
+    let rnd = hash;
+
+    ctx.save();
+    for (let i = 0; i < 20; i++) {
+        const barY = seededFunc(rnd++) * height;
+        const barH = 4 + seededFunc(rnd++) * 25;
+        const barW = 2 + seededFunc(rnd++) * (width - 12);
+        const opacity = 0.3 + seededFunc(rnd++) * 0.5;
+
+        const palette = ['#ff9d00', '#00ffcc', '#ffffff', '#ff37ff', '#37ffff'];
+        ctx.fillStyle = palette[Math.floor(seededFunc(rnd++) * palette.length)];
+        ctx.globalAlpha = opacity;
+
+        ctx.fillRect(startX + 6 + (width - 12 - barW) / 2, barY, barW, barH);
+
+        if (seededFunc(rnd++) > 0.7) {
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.fillRect(startX + 4, barY, width - 8, 1);
+        }
+    }
+    ctx.restore();
+}
+
+function drawFullBoard(ctx, board, colors, winningCoords = [], gameId = null) {
     drawBoardBackground(ctx);
+    if (gameId) drawSideSignature(ctx, gameId);
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
-            const x = PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
-            const y = COL_NUM_HEIGHT + PADDING + r * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+            const x = BOARD_OFFSET_X + PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+            const y = BOARD_OFFSET_Y + COL_NUM_HEIGHT + PADDING + r * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
             const cell = board[r][c];
             const isWinning = winningCoords.some(coord => coord.r === r && coord.c === c);
 
@@ -121,13 +176,13 @@ function drawBoardBackground(ctx) {
     ctx.fillStyle = boardGrad;
     ctx.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.font = 'bold 20px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.font = 'bold 32px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < COLS; c++) {
-        const x = PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
-        ctx.fillText(`${c + 1}`, x, COL_NUM_HEIGHT / 2);
+        const x = BOARD_OFFSET_X + PADDING + c * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+        ctx.fillText(`${c + 1}`, x, BOARD_OFFSET_Y + COL_NUM_HEIGHT / 2);
     }
 }
 
@@ -193,13 +248,13 @@ function darkenColor(hex, percent) {
     return result;
 }
 
-async function renderAnimatedBoard(board, colors, lastMove) {
+async function renderAnimatedBoard(board, colors, lastMove, gameId = null) {
     return new Promise((resolve, reject) => {
         const encoder = new GIFEncoder(BOARD_WIDTH, BOARD_HEIGHT);
         const stream = encoder.createReadStream();
         encoder.start();
         encoder.setRepeat(-1);
-        encoder.setDelay(45);
+        encoder.setDelay(50);
         encoder.setQuality(19);
 
         const chunks = [];
@@ -219,12 +274,12 @@ async function renderAnimatedBoard(board, colors, lastMove) {
                 else prevBoard[r][c] = board[r][c];
             }
         }
-        drawFullBoard(staticCtx, prevBoard, colors);
+        drawFullBoard(staticCtx, prevBoard, colors, [], gameId);
 
-        const endY = COL_NUM_HEIGHT + PADDING + lastMove.row * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
-        const x = PADDING + lastMove.col * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+        const endY = BOARD_OFFSET_Y + COL_NUM_HEIGHT + PADDING + lastMove.row * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
+        const x = BOARD_OFFSET_X + PADDING + lastMove.col * (CELL_SIZE + PADDING) + CELL_SIZE / 2;
         let currentY = -BALL_RADIUS;
-        const speed = 47;
+        const speed = 50;
 
         while (currentY < endY) {
             currentY += speed;
@@ -245,17 +300,17 @@ async function renderAnimatedBoard(board, colors, lastMove) {
 
                 ctx.save();
                 ctx.translate(shakeX, shakeY);
-                drawFullBoard(ctx, board, colors, winningCoords);
+                drawFullBoard(ctx, board, colors, winningCoords, gameId);
                 drawFlames(ctx, x, endY, i);
                 encoder.addFrame(ctx);
                 ctx.restore();
             }
             for (let i = 0; i < 5; i++) {
-                drawFullBoard(ctx, board, colors, winningCoords);
+                drawFullBoard(ctx, board, colors, winningCoords, gameId);
                 encoder.addFrame(ctx);
             }
         } else {
-            drawFullBoard(ctx, board, colors);
+            drawFullBoard(ctx, board, colors, [], gameId);
             encoder.addFrame(ctx);
         }
 
@@ -297,7 +352,7 @@ function buildGameComponents(gameId, t, board, aiThinking = false, isGameOver = 
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(isGameOver || aiThinking || !validMoves.includes(c));
 
-        if (c < 5) row1.addComponents(btn);
+        if (c < 4) row1.addComponents(btn);
         else row2.addComponents(btn);
     }
 
@@ -479,7 +534,7 @@ module.exports = {
                 turn = PLAYER_1;
             }
 
-            const buffer = await renderBoard(board, colors, lastMove);
+            const buffer = await renderBoard(board, colors, lastMove, gameId);
             logger.debug(`[/Connect4] Generated initial board buffer, size: ${buffer.length} bytes`);
             const attachName = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.${lastMove ? 'gif' : 'png'}`;
             const attachment = new AttachmentBuilder(buffer, { name: attachName });
@@ -505,7 +560,7 @@ module.exports = {
                 .addSectionComponents(
                     new SectionBuilder()
                         .addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                            new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
                             new TextDisplayBuilder().setContent(t('commands:connect4.game_vs_ai', {
                                 playerColor: game.colors.p1.emoji,
                                 aiColor: game.colors.p2.emoji
@@ -552,10 +607,12 @@ module.exports = {
             if (userId !== game.opponentId) {
                 return interaction.reply({ content: `${e.deny} ${t('common:pagination.not_for_you')}`, flags: MessageFlags.Ephemeral });
             }
-            if (isUserInGame(userId)) {
+            const userCurrentGame = isUserInGame(userId);
+            if (userCurrentGame && userCurrentGame !== gameId) {
                 return interaction.reply({ content: `${e.pixel_cross} ${t('common:games.already_in_game')}`, flags: MessageFlags.Ephemeral });
             }
-            if (isUserInGame(game.challengerId)) {
+            const challengerCurrentGame = isUserInGame(game.challengerId);
+            if (challengerCurrentGame && challengerCurrentGame !== gameId) {
                 return interaction.reply({ content: `${e.pixel_cross} ${t('common:games.challenger_busy')}`, flags: MessageFlags.Ephemeral });
             }
 
@@ -564,7 +621,7 @@ module.exports = {
             game.lastInteraction = Date.now();
             if (!game.lastInfo) game.lastInfo = {};
 
-            const buffer = await renderBoard(game.board, game.colors);
+            const buffer = await renderBoard(game.board, game.colors, null, gameId);
             logger.debug(`[Connect4] Generated accept board buffer, size: ${buffer.length} bytes`);
             const attachName = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.png`;
             game.lastInfo.attachmentName = attachName;
@@ -575,7 +632,7 @@ module.exports = {
                 .addSectionComponents(
                     new SectionBuilder()
                         .addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                            new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
                             new TextDisplayBuilder().setContent(`-# ${game.colors.p1.emoji} <@${game.challengerId}> vs ${game.colors.p2.emoji} <@${game.opponentId}>`)
                         ).setButtonAccessory(buildForfeitButton(gameId, t))
                 )
@@ -660,7 +717,7 @@ module.exports = {
                 }
 
                 await interaction.deferUpdate();
-                const buffer = await renderBoard(game.board, game.colors, lastMove);
+                const buffer = await renderBoard(game.board, game.colors, lastMove, gameId);
                 logger.debug(`[Connect4] Generated win board buffer, size: ${buffer.length} bytes`);
                 const attachName = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.gif`;
                 const attachment = new AttachmentBuilder(buffer, { name: attachName });
@@ -693,8 +750,8 @@ module.exports = {
                     .addSectionComponents(
                         new SectionBuilder()
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
-                                new TextDisplayBuilder().setContent(`${e.loading} ${t('commands:connect4.ai_thinking')}`)
+                                new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                                new TextDisplayBuilder().setContent(`-# ${e.loading} ${t('commands:connect4.ai_thinking')}`)
                             ).setButtonAccessory(buildForfeitButton(gameId, t, true))
                     )
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
@@ -707,7 +764,7 @@ module.exports = {
                     flags: MessageFlags.IsComponentsV2
                 });
 
-                const buffer = await renderBoard(game.board, game.colors, lastMove);
+                const buffer = await renderBoard(game.board, game.colors, lastMove, gameId);
                 logger.debug(`[Connect4] Generated move board buffer, size: ${buffer.length} bytes`);
                 const attachName1 = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.gif`;
                 game.lastInfo.attachmentName = attachName1;
@@ -718,8 +775,8 @@ module.exports = {
                     .addSectionComponents(
                         new SectionBuilder()
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
-                                new TextDisplayBuilder().setContent(`${e.loading} ${t('commands:connect4.ai_thinking')}`)
+                                new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                                new TextDisplayBuilder().setContent(`-# ${e.loading} ${t('commands:connect4.ai_thinking')}`)
                             ).setButtonAccessory(buildForfeitButton(gameId, t, true))
                     )
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
@@ -749,7 +806,7 @@ module.exports = {
                     removeGame(gameId);
                     if (aiWinner !== 'tie') connect4AI.recordGameResult(AI);
 
-                    const aiBuffer = await renderBoard(game.board, game.colors, aiMove);
+                    const aiBuffer = await renderBoard(game.board, game.colors, aiMove, gameId);
                     const attachName2 = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.gif`;
                     const aiAttach = new AttachmentBuilder(aiBuffer, { name: attachName2 });
                     let winMsg = (aiWinner === 'tie') ? t('common:games.tie') : t('common:games.you_lose');
@@ -770,7 +827,7 @@ module.exports = {
                 }
 
                 game.turn = game.userSide;
-                const finalBuffer = await renderBoard(game.board, game.colors, aiMove);
+                const finalBuffer = await renderBoard(game.board, game.colors, aiMove, gameId);
                 const attachName3 = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.gif`;
                 game.lastInfo.attachmentName = attachName3;
                 const finalAttach = new AttachmentBuilder(finalBuffer, { name: attachName3 });
@@ -780,7 +837,7 @@ module.exports = {
                     .addSectionComponents(
                         new SectionBuilder()
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                                new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
                                 new TextDisplayBuilder().setContent(t('common:games.turn_yours'))
                             ).setButtonAccessory(buildForfeitButton(gameId, t))
                     )
@@ -802,7 +859,7 @@ module.exports = {
                     .addSectionComponents(
                         new SectionBuilder()
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                                new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
                                 new TextDisplayBuilder().setContent(`-# ${game.colors.p1.emoji} <@${game.challengerId}> vs ${game.colors.p2.emoji} <@${game.opponentId}>`)
                             ).setButtonAccessory(buildForfeitButton(gameId, t))
                     )
@@ -817,7 +874,7 @@ module.exports = {
                     flags: MessageFlags.IsComponentsV2
                 });
 
-                const buffer = await renderBoard(game.board, game.colors, lastMove);
+                const buffer = await renderBoard(game.board, game.colors, lastMove, gameId);
                 logger.debug(`[Connect4] Generated PvP move board buffer, size: ${buffer.length} bytes`);
                 const attachName4 = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.gif`;
                 game.lastInfo.attachmentName = attachName4;
@@ -828,7 +885,7 @@ module.exports = {
                     .addSectionComponents(
                         new SectionBuilder()
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                                new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
                                 new TextDisplayBuilder().setContent(`-# ${game.colors.p1.emoji} <@${game.challengerId}> vs ${game.colors.p2.emoji} <@${game.opponentId}>`)
                             ).setButtonAccessory(buildForfeitButton(gameId, t))
                     )
@@ -855,3 +912,5 @@ module.exports = {
         created: 1766066848
     }
 };
+
+// contributors: @relentiousdragon

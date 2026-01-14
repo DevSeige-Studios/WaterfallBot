@@ -3,7 +3,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js')
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('_leave').setDescription('Team Only')
-        .addStringOption(option => option.setName('guild').setDescription('Guild').setRequired(true)),
+        .addStringOption(option => option.setName('guild').setDescription('Guild ID').setRequired(true)),
     integration_types: [0, 1],
     contexts: [0, 1, 2],
     dev: false,
@@ -21,6 +21,7 @@ module.exports = {
             return interaction.editReply('No guild with that ID for the bot!')
         }
         guild.leave()
+        logger.warnAlert(`user ${interaction.user.tag} triggered manual leave for guild ${guild.name} (${guild.id})`)
         return interaction.editReply('Done successfully')
     },
     help: {
@@ -32,3 +33,4 @@ module.exports = {
         created: 1764938508
     }
 }
+// contributors: @relentiousdragon

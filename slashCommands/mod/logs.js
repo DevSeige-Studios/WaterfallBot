@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, PermissionsBitField, ChannelType, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, WebhookClient } = require("discord.js");
 const e = require("../../data/emoji.js");
-const commandMeta = require("../../util/i18n.js").getCommandMetadata();
+const { getCommandMetadata, i18n } = require("../../util/i18n.js");
+const commandMeta = getCommandMetadata();
 const { Server } = require("../../schemas/servers.js");
 const { settings } = require("../../util/settingsModule.js");
 
@@ -128,7 +129,7 @@ module.exports = {
         } catch (error) {
             logger.error("Error executing logs command:", error);
             return interaction.reply({
-                content: `${e.pixel_cross} An error occurred while executing the command.`,
+                content: `${e.pixel_cross} ${t('common:error')}`,
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -173,6 +174,7 @@ async function handleEnable(bot, interaction, t, logger) {
     const enabledTypes = [];
     const updatedTypes = [];
     const skippedTypes = [];
+    const serverT = i18n.getFixedT(server?.language || 'en');
 
     for (const logType of typesToProcess) {
         if (server.logs[logType] && server.logs[logType].channelId) {
@@ -183,7 +185,7 @@ async function handleEnable(bot, interaction, t, logger) {
                 if (server.logs[logType].webhook && server.logs[logType].webhook.length === 2) {
                     try {
                         const oldWebhook = new WebhookClient({ id: server.logs[logType].webhook[0], token: server.logs[logType].webhook[1] });
-                        await oldWebhook.delete('Moving log channel');
+                        await oldWebhook.delete(serverT('commands:logs.webhook_reason_move'));
                     } catch (err) {
                         //
                     }
@@ -198,7 +200,7 @@ async function handleEnable(bot, interaction, t, logger) {
             const webhook = await channel.createWebhook({
                 name: 'Waterfall',
                 avatar: bot.user.displayAvatarURL(),
-                reason: `Log setup for ${logType}`
+                reason: serverT('commands:logs.webhook_reason_setup', { type: logType })
             });
 
             server.logs[logType] = {
@@ -219,9 +221,9 @@ async function handleEnable(bot, interaction, t, logger) {
 
     if (type === 'all') {
         const lines = [];
-        if (enabledTypes.length > 0) lines.push(`**Enabled:** ${enabledTypes.join(', ')}`);
-        if (updatedTypes.length > 0) lines.push(`**Updated:** ${updatedTypes.join(', ')}`);
-        if (skippedTypes.length > 0) lines.push(`**Already Active:** ${skippedTypes.join(', ')}`);
+        if (enabledTypes.length > 0) lines.push(t('commands:logs.enable_all_enabled', { types: enabledTypes.join(', ') }));
+        if (updatedTypes.length > 0) lines.push(t('commands:logs.enable_all_updated', { types: updatedTypes.join(', ') }));
+        if (skippedTypes.length > 0) lines.push(t('commands:logs.enable_all_already_active', { types: skippedTypes.join(', ') }));
 
         const container = new ContainerBuilder()
             .setAccentColor(0x6BCF7F)
@@ -229,7 +231,7 @@ async function handleEnable(bot, interaction, t, logger) {
                 new SectionBuilder()
                     .setThumbnailAccessory(new ThumbnailBuilder().setURL(bot.user.displayAvatarURL()))
                     .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(`# ${e.checkmark_green} Log Types in <#${channel.id}>`),
+                        new TextDisplayBuilder().setContent(`## ${e.checkmark_green} ${t('commands:logs.enable_all_success', { channel: `<#${channel.id}>`, count: enabledTypes.length + updatedTypes.length })}`),
                         new TextDisplayBuilder().setContent(lines.join('\n'))
                     )
             );
@@ -245,11 +247,11 @@ async function handleEnable(bot, interaction, t, logger) {
     } else {
         let message;
         if (skippedTypes.length > 0) {
-            message = `${e.info} **${type}** logs are already enabled in <#${channel.id}>.`;
+            message = t('commands:logs.enable_exists', { type, channel: `<#${channel.id}>` });
         } else if (updatedTypes.length > 0) {
-            message = `${e.settings_cog} **${type}** logs moved to <#${channel.id}>.`;
+            message = t('commands:logs.enable_updated', { type, oldChannel: '...', newChannel: `<#${channel.id}>` }); // Note: updatedTypes handling could be better to show old channel
         } else {
-            message = `${e.checkmark_green} **${type}** logs enabled in <#${channel.id}>.`;
+            message = t('commands:logs.enable_success_desc', { type, channel: `<#${channel.id}>` });
         }
 
         const container = new ContainerBuilder()
@@ -259,7 +261,7 @@ async function handleEnable(bot, interaction, t, logger) {
                     .setThumbnailAccessory(new ThumbnailBuilder().setURL(bot.user.displayAvatarURL()))
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(`# ${e.checkmark_green} ${t('commands:logs.enable_success_title')}`),
-                        new TextDisplayBuilder().setContent(message)
+                        new TextDisplayBuilder().setContent(`${skippedTypes.length > 0 ? e.info : (updatedTypes.length > 0 ? e.settings_cog : e.green_point)} ${message}`)
                     )
             );
         container.addSeparatorComponents(
@@ -288,13 +290,14 @@ async function handleDisable(bot, interaction, t, logger) {
 
     const typesToProcess = type === 'all' ? [...new Set(Object.values(LOG_GROUP_MAP))] : [LOG_GROUP_MAP[type]];
     const disabledTypes = [];
+    const serverT = i18n.getFixedT(server?.language || 'en');
 
     for (const logType of typesToProcess) {
         if (server.logs[logType]) {
             if (server.logs[logType].webhook && server.logs[logType].webhook.length === 2) {
                 try {
                     const webhook = new WebhookClient({ id: server.logs[logType].webhook[0], token: server.logs[logType].webhook[1] });
-                    await webhook.delete('Log disabled');
+                    await webhook.delete(serverT('commands:logs.webhook_reason_disable'));
                 } catch (err) {
                     if (err.code !== 10015 && settings.debug === "true") {
                         logger.error('Error deleting webhook:', err);
@@ -312,8 +315,8 @@ async function handleDisable(bot, interaction, t, logger) {
 
     if (type === 'all') {
         const message = disabledTypes.length > 0
-            ? `**Disabled:** ${disabledTypes.join(', ')}`
-            : 'No log types were enabled.';
+            ? t('commands:logs.disable_all_disabled', { types: disabledTypes.join(', ') })
+            : t('commands:logs.disable_all_none');
 
         const container = new ContainerBuilder()
             .setAccentColor(0xFF6B6B)
@@ -339,8 +342,8 @@ async function handleDisable(bot, interaction, t, logger) {
         });
     } else {
         const message = disabledTypes.length > 0
-            ? `**${type}** logs have been disabled.`
-            : `**${type}** logs were not enabled.`;
+            ? t('commands:logs.disable_success_desc', { type })
+            : t('commands:logs.disable_not_enabled', { type });
 
         const container = new ContainerBuilder()
             .setAccentColor(0xFF6B6B)
@@ -372,18 +375,23 @@ async function handleList(bot, interaction, t, logger) {
     try {
         const server = await Server.findOne({ serverID: interaction.guildId }).lean();
 
-        const entries = [];
         const validLogGroups = [...new Set(Object.values(LOG_GROUP_MAP))];
 
+        const activeLogs = [];
         if (server && server.logs) {
             for (const [key, value] of Object.entries(server.logs)) {
                 if (value && value.channelId && validLogGroups.includes(key)) {
-                    const typeName = t(`commands:logs.type_${key}`);
-                    const emoji = entries.length === 0 ? e.reply : e.reply_cont;
-                    entries.push(`${emoji} **${typeName}:** <#${value.channelId}>`);
+                    activeLogs.push({ key, channelId: value.channelId });
                 }
             }
         }
+
+        const entries = activeLogs.map((log, index) => {
+            const typeName = t(`commands:logs.type_${log.key}`);
+            const isLast = index === activeLogs.length - 1;
+            const emoji = isLast ? e.reply : e.reply_cont;
+            return `${emoji} **${typeName}:** <#${log.channelId}>`;
+        });
 
         const section = new SectionBuilder()
             .setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild.iconURL() || bot.user.displayAvatarURL()))
@@ -442,10 +450,6 @@ async function handleIgnoreBots(bot, interaction, t, logger) {
         const server = await Server.findOne({ serverID: interaction.guildId });
 
         if (server?.logs?.ignoreBots === enabled) {
-            const statusKey = enabled
-                ? 'commands:logs.ignore_bots_already_enabled'
-                : 'commands:logs.ignore_bots_already_disabled';
-
             const icon = e.info;
             const color = 0xF2C94C;
 
@@ -456,7 +460,9 @@ async function handleIgnoreBots(bot, interaction, t, logger) {
                         .setThumbnailAccessory(new ThumbnailBuilder().setURL(bot.user.displayAvatarURL()))
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(`# ${icon} ${t('commands:logs.no_changes')}`),
-                            new TextDisplayBuilder().setContent(t(statusKey))
+                            new TextDisplayBuilder().setContent(t(enabled
+                                ? 'commands:logs.ignore_bots_already_enabled'
+                                : 'commands:logs.ignore_bots_already_disabled'))
                         )
                 );
 
@@ -512,8 +518,9 @@ async function handleIgnoreBots(bot, interaction, t, logger) {
             logger.error('Error toggling ignore bots:', error);
         }
         await interaction.editReply({
-            content: `${e.pixel_cross} ${t('commands:logs.error_generic')}`
+            content: `${e.pixel_cross} ${t('commands:logs.error')}`
         });
     }
 }
 
+// contributors: @relentiousdragon

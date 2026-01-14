@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
-const settings = require("../../util/settings.json");
+const { settings } = require("../../util/settingsModule.js");
 const logger = require("../../logger.js");
 const { deployCommands } = require("../../deploy-commands.js");
 const e = require("../../data/emoji.js");
@@ -50,6 +50,8 @@ module.exports = {
 			subcommand
 				.setName("deploy")
 				.setDescription("Re-deploy all slash commands via REST")),
+	integration_types: [0, 1],
+	contexts: [0, 1, 2],
 	dev: true,
 	explicit: process.env.CANARY === "true" ? false : true,
 	async execute(bot, interaction, funcs) {
@@ -187,3 +189,5 @@ module.exports = {
 		created: 1764938508
 	}
 };
+
+// contributors: @relentiousdragon

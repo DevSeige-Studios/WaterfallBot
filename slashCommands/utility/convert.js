@@ -136,8 +136,82 @@ const CONVERSIONS = {
         }
     }
 };
+const TZ_SHORTCODES = {
+    "EST": "-05:00", "EDT": "-04:00", "CST": "-06:00", "CDT": "-05:00",
+    "MST": "-07:00", "MDT": "-06:00", "PST": "-08:00", "PDT": "-07:00",
+    "BST": "+01:00", "CET": "+01:00", "CEST": "+02:00", "EET": "+02:00",
+    "EEST": "+03:00", "KST": "+09:00", "JST": "+09:00", "AEST": "+10:00",
+    "AEDT": "+11:00", "IST": "+05:30", "NZST": "+12:00", "NZDT": "+13:00"
+};
+
+function normalizeOffset(tz) {
+    let cleanOff = tz.replace(/^(UTC|GMT)/i, '').trim() || "+00:00";
+
+    if (/^[+-]?\d+$/.test(cleanOff)) {
+        const sign = cleanOff.startsWith('-') ? '-' : '+';
+        const num = cleanOff.replace(/^[+-]/, '').padStart(2, '0');
+        return `${sign}${num}:00`;
+    }
+
+    if (/^[+-]?\d+:\d+$/.test(cleanOff)) {
+        if (!cleanOff.startsWith('+') && !cleanOff.startsWith('-')) cleanOff = "+" + cleanOff;
+        const [h, m] = cleanOff.slice(1).split(':');
+        return `${cleanOff[0]}${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+    }
+
+    return tz;
+}
+
+function getMomentForTz(input, timeInput = null) {
+    if (!input) return null;
+    let tz = input.trim();
+
+    const parseTime = (val) => {
+        if (!val) return moment.utc();
+        if (/^\d+$/.test(val)) {
+            const ts = parseInt(val);
+            return ts > 10000000000 ? moment.utc(ts) : moment.utc(ts * 1000);
+        }
+        return moment.utc(val, ["h:mm A", "H:mm", "YYYY-MM-DD HH:mm", "MMMM D, YYYY h:mm A", "MMM D, YYYY h:mm A", "YYYY-MM-DD"]);
+    };
+
+    if (moment.tz.zone(tz)) {
+        let m;
+        if (!timeInput) {
+            m = moment.tz(tz);
+        } else if (/^\d+$/.test(timeInput)) {
+            const ts = parseInt(timeInput);
+            m = ts > 10000000000 ? moment.tz(ts, tz) : moment.tz(ts * 1000, tz);
+        } else {
+            m = moment.tz(timeInput, ["h:mm A", "H:mm", "YYYY-MM-DD HH:mm", "MMMM D, YYYY h:mm A", "MMM D, YYYY h:mm A", "YYYY-MM-DD"], tz);
+        }
+        return m.isValid() ? m : null;
+    }
+
+    const upperTz = tz.toUpperCase();
+    if (TZ_SHORTCODES[upperTz]) {
+        const offset = TZ_SHORTCODES[upperTz];
+        const m = parseTime(timeInput);
+        if (!m.isValid()) return null;
+        return m.utcOffset(offset, !!timeInput);
+    }
+
+    const cleanOff = normalizeOffset(tz);
+
+    try {
+        const m = parseTime(timeInput);
+        if (!m.isValid()) return null;
+        m.utcOffset(cleanOff, !!timeInput);
+        return m.isValid() ? m : null;
+    } catch {
+        return null;
+    }
+}
 //
 module.exports = {
+    normalizeOffset,
+    getMomentForTz,
+    TZ_SHORTCODES,
     data: new SlashCommandBuilder()
         .setName("convert")
         .setNameLocalizations(commandMeta.convert?.name || {})
@@ -366,6 +440,12 @@ module.exports = {
                 .setDescription("Date or timestamp")
                 .setDescriptionLocalizations(commandMeta.convert?.option_query_description || {})
                 .setRequired(true))
+            .addStringOption(o => o
+                .setName("timezone")
+                .setNameLocalizations(commandMeta.convert?.option_timezone_name || {})
+                .setDescription("Timezone for parsing the query (defaults to UTC)")
+                .setDescriptionLocalizations(commandMeta.convert?.option_timezone_description || {})
+                .setAutocomplete(true))
         )
         .addSubcommand(sub => sub
             .setName("area")
@@ -529,15 +609,31 @@ module.exports = {
     explicit: false,
     async autocomplete(interaction) {
         const focusedOption = interaction.options.getFocused(true);
-        if (focusedOption.name === "source_tz" || focusedOption.name === "target_tz") {
+        if (focusedOption.name === "source_tz" || focusedOption.name === "target_tz" || focusedOption.name === "timezone") {
+            const val = focusedOption.value;
+            const upperVal = val.toUpperCase();
+
+            if (upperVal.startsWith("UTC") || upperVal.startsWith("GMT")) {
+                const prefix = upperVal.startsWith("UTC") ? "UTC" : "GMT";
+                const suggestions = [];
+                for (let i = -12; i <= 14; i++) {
+                    const sign = i >= 0 ? "+" : "";
+                    const label = `${prefix}${sign}${i}`;
+                    if (label.includes(upperVal)) {
+                        suggestions.push({ name: label, value: label });
+                    }
+                }
+                if (suggestions.length > 0) return interaction.respond(suggestions.slice(0, 25));
+            }
+
             const timezones = [
-                "UTC", "GMT", "EST", "EDT", "CST", "CDT", "MST", "MDT", "PST", "PDT",
+                "UTC", "GMT", "EST", "EDT", "CST", "CDT", "MST", "MDT", "PST", "PDT", "CET", "CEST", "KST", "JST", "IST",
                 "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Madrid", "Europe/Moscow",
                 "Asia/Tokyo", "Asia/Shanghai", "Asia/Dubai", "Asia/Singapore", "Asia/Seoul", "Asia/Kolkata",
                 "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Sao_Paulo", "America/Mexico_City",
                 "Australia/Sydney", "Australia/Melbourne", "Australia/Perth", "Pacific/Auckland"
             ];
-            const filtered = timezones.filter(tz => tz.toLowerCase().includes(focusedOption.value.toLowerCase())).slice(0, 25);
+            const filtered = timezones.filter(tz => tz.toLowerCase().includes(val.toLowerCase())).slice(0, 25);
             return interaction.respond(filtered.map(tz => ({ name: tz, value: tz })));
         }
 
@@ -795,29 +891,40 @@ module.exports = {
     handleTimeConversion(interaction, t, container) {
         const sourceTz = interaction.options.getString("source_tz");
         const targetTz = interaction.options.getString("target_tz");
-        const timeInput = interaction.options.getString("time");
+        const timeInputRaw = interaction.options.getString("time");
+        const timeInput = (timeInputRaw && timeInputRaw.toLowerCase().trim() === "now") ? null : timeInputRaw;
 
         try {
-            if (!moment.tz.zone(sourceTz) || !moment.tz.zone(targetTz)) {
+            const sourceMoment = getMomentForTz(sourceTz, timeInput);
+            const targetMomentSample = getMomentForTz(targetTz);
+
+            if (!sourceMoment || !targetMomentSample) {
                 throw new Error("Invalid format");
             }
 
-            const sourceMoment = timeInput ? moment.tz(timeInput, ["h:mm A", "H:mm", "YYYY-MM-DD HH:mm"], sourceTz) : moment.tz(sourceTz);
-            if (!sourceMoment.isValid()) throw new Error("Invalid time");
+            const targetMoment = sourceMoment.clone();
 
-            const targetMoment = sourceMoment.clone().tz(targetTz);
+            if (targetTz.match(/^(UTC|GMT|[+-]|\d)/i) && !moment.tz.zone(targetTz) && !TZ_SHORTCODES[targetTz.toUpperCase()]) {
+                targetMoment.utcOffset(normalizeOffset(targetTz));
+            } else if (TZ_SHORTCODES[targetTz.toUpperCase()]) {
+                targetMoment.utcOffset(TZ_SHORTCODES[targetTz.toUpperCase()]);
+            } else {
+                targetMoment.tz(targetTz);
+            }
             const unix = Math.floor(sourceMoment.valueOf() / 1000);
 
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(`# ${e.calendar} ${t("commands:convert.converted_time")}`),
                 new TextDisplayBuilder().setContent(`**${sourceTz}** → **${targetTz}**`),
-                new TextDisplayBuilder().setContent(`\n**${t("commands:convert.local_time")}**\n${targetMoment.format("LLLL")}`),
-                new TextDisplayBuilder().setContent(`\n**Discord Timestamps:**\n<t:${unix}:f>\n<t:${unix}:R>\n\n**Raw Tags:**\n\`\`\`\n<t:${unix}:d>\n<t:${unix}:t>\n<t:${unix}:f>\n<t:${unix}:R>\n\`\`\``)
+                new TextDisplayBuilder().setContent(`\n**${t("commands:convert.local_time_source")}**\n${sourceMoment.format("LLLL")}`),
+                new TextDisplayBuilder().setContent(`\n**${t("commands:convert.local_time_target")}**\n${targetMoment.format("LLLL")}`),
+                new TextDisplayBuilder().setContent(`\n**${t("commands:convert.discord_timestamps")}**\n<t:${unix}:t> • <t:${unix}:R>`)
             );
 
             container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
 
             container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`### ${t("commands:convert.raw_tags_title")}\n\`\`\`\n<t:${unix}:d>\n<t:${unix}:t>\n<t:${unix}:f>\n<t:${unix}:R>\n\`\`\``),
                 new TextDisplayBuilder().setContent(`### ${t("commands:convert.formula")}\n\`\`\`\nlocal_time = unix_time + timezone_offset\n\`\`\``)
             )
                 .addSeparatorComponents(
@@ -832,22 +939,19 @@ module.exports = {
             return interaction.reply({ content: `${e.pixel_cross} ${t("commands:convert.error_timezone", { tz: sourceTz + "/" + targetTz })}`, flags: MessageFlags.Ephemeral });
         }
     },
-
     handleUnixConversion(interaction, t, container) {
         const query = interaction.options.getString("query");
-        let date;
+        const timezone = interaction.options.getString("timezone") || "UTC";
 
-        if (/^\d+$/.test(query)) {
-            const ts = parseInt(query);
-            date = ts > 10000000000 ? new Date(ts) : new Date(ts * 1000);
-        } else {
-            date = new Date(query);
-        }
+        const m = (query && query.toLowerCase().trim() === "now")
+            ? moment.utc()
+            : getMomentForTz(timezone, query);
 
-        if (isNaN(date.getTime())) {
+        if (!m || !m.isValid()) {
             return interaction.reply({ content: `${e.pixel_cross} ${t("commands:convert.error_unix")}`, flags: MessageFlags.Ephemeral });
         }
 
+        const date = m.toDate();
         const unix = Math.floor(date.getTime() / 1000);
 
         container.addTextDisplayComponents(
@@ -872,3 +976,5 @@ module.exports = {
         created: 1766392414
     }
 };
+
+// contributors: @relentiousdragon

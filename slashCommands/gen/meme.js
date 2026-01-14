@@ -130,3 +130,5 @@ module.exports = {
         created: 1766228122
     }
 };
+
+// contributors: @relentiousdragon

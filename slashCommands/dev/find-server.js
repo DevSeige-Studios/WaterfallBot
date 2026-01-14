@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, ComponentType, PermissionsBitField, MessageFlags } = require("discord.js");
-const settings = require("../../util/settings.json");
+const { settings } = require("../../util/settingsModule.js");
 const e = require("../../data/emoji.js");
 
 async function getAllGuilds(bot) {
@@ -23,28 +23,6 @@ async function getAllGuilds(bot) {
     );
     return results.flat();
 }
-
-async function getGuildOnShard(bot, guildId) {
-    if (!bot.shard) return bot.guilds.cache.get(guildId);
-    const results = await bot.shard.broadcastEval(
-        (id) => {
-            const g = this.guilds.cache.get(id);
-            if (!g) return null;
-            return {
-                id: g.id,
-                name: g.name,
-                memberCount: g.memberCount,
-                icon: g.icon,
-                createdTimestamp: g.createdTimestamp
-            };
-        },
-        { context: guildId }
-    );
-    const found = results.find(g => g);
-    if (!found) return null;
-    if (bot.guilds.cache.has(guildId)) return bot.guilds.cache.get(guildId);
-    return found;
-}
 //
 module.exports = {
     data: new SlashCommandBuilder()
@@ -56,6 +34,8 @@ module.exports = {
                 .setAutocomplete(true)
                 .setRequired(false)
         ),
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
     dev: true,
     explicit: process.env.CANARY === "true" ? false : true,
     async autocomplete(interaction, bot) {
@@ -269,3 +249,5 @@ module.exports = {
         created: 1764938508
     }
 };
+
+// contributors: @relentiousdragon

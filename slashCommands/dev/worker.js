@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { send: sendHourly } = require("../../hourlyWorker.js");
 const dailyWorker = require("../../dailyWorker.js");
-const settings = require("../../util/settings.json");
+const analyticsWorker = require("../../util/analyticsWorker.js");
+const { settings } = require("../../util/settingsModule.js");
 const e = require("../../data/emoji.js");
 //
 module.exports = {
@@ -14,9 +15,12 @@ module.exports = {
 				.setRequired(true)
 				.addChoices(
 					{ name: "hourly", value: "hourly" },
-					{ name: "daily", value: "daily" }
+					{ name: "daily", value: "daily" },
+					{ name: "export", value: "export" }
 				)
 		),
+	integration_types: [0, 1],
+	contexts: [0, 1, 2],
 	dev: true,
 	explicit: process.env.CANARY === "true" ? false : true,
 	async execute(bot, interaction, funcs) {
@@ -28,6 +32,9 @@ module.exports = {
 		} else if (type === "daily") {
 			await dailyWorker.send(bot);
 			await interaction.editReply("Daily Worker executed successfully.");
+		} else if (type === "export") {
+			await analyticsWorker.exportAnalytics();
+			await interaction.editReply("Analytics Export triggered.");
 		} else {
 			await interaction.editReply("Invalid worker type specified.");
 		}
@@ -41,3 +48,5 @@ module.exports = {
 		created: 1764938508
 	}
 };
+
+// contributors: @relentiousdragon

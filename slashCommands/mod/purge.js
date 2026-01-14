@@ -130,14 +130,14 @@ async function processQueue(bot, logger, t) {
                 components: [container],
                 flags: MessageFlags.IsComponentsV2
             }).catch(() => { });
-        }
 
-        await modLog.logAction(bot, interaction.guildId, {
-            action: 'PURGE',
-            moderator: interaction.user,
-            details: t('commands:purge.desc_completed', { count: deleted }),
-            channel: channel
-        });
+            await modLog.logAction(bot, interaction.guildId, {
+                action: 'PURGE',
+                moderator: interaction.user,
+                details: t('commands:purge.desc_completed', { count: deleted }),
+                channel: channel
+            });
+        }
 
     } catch (err) {
         if (interaction) {
@@ -258,3 +258,5 @@ module.exports = {
     },
     bulkDeleteMessages
 };
+
+// contributors: @relentiousdragon

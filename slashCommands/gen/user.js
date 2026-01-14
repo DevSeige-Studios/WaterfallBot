@@ -2,6 +2,8 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, Messa
 const e = require("../../data/emoji.js");
 const { Server } = require("../../schemas/servers.js");
 const { ServerStats } = require("../../schemas/serverStats.js");
+const Warns = require("../../schemas/warns.js");
+const Infractions = require("../../schemas/infractions.js");
 
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const FLAG_MASKS = {
@@ -122,7 +124,9 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
                         default: "Default",
                         crimson: "Crimson",
                         azure: "Azure",
-                        azure_glow: "Azure (Glow)"
+                        amethyst: "Amethyst",
+                        amethyst_glow: "Amethyst (Glow)",
+                        sea_breeze: "Sea Breeze"
                     };
                     const themeName = themeNames[serverConf.botProfile] || "Default";
                     title += `\n-# ${t('commands:user.theme', { theme: themeName })}`;
@@ -215,9 +219,7 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
                         description += `\n\n### ${t('commands:user.activity_stats') || 'Activity (30 days)'}`;
                         if (messages > 0) description += `\n${e.channel} **${messages.toLocaleString()}** ${t('commands:serverstats.messages').toLowerCase()}`;
                         if (vcTime > 0) {
-                            const hours = Math.floor(vcTime / 3600);
-                            const mins = Math.floor((vcTime % 3600) / 60);
-                            description += `\n${e.voice_channnel} **${hours}h ${mins}m** ${t('commands:serverstats.voice_time').toLowerCase()}`;
+                            description += `\n${e.voice_channnel} **${funcs.formatDurationPretty(vcTime * 1000, { maxUnit: 'h', excludeWeeks: true })}** ${t('commands:serverstats.voice_time').toLowerCase()}`;
                         }
                         if (invites > 0) description += `\n${e.invite} **${invites}** ${t('commands:serverstats.invites').toLowerCase()}`;
                     }
@@ -225,6 +227,32 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
             }
         } catch (err) {
             //
+        }
+
+        if (interaction.member.permissions.has('ModerateMembers')) {
+            try {
+                const warnData = await Warns.findOne({ serverID: interaction.guild.id, userID: target.id }).lean();
+                const infractions = await Infractions.find({ serverID: interaction.guild.id, userID: target.id }).lean();
+                const warns = warnData?.warns || [];
+                const risk = funcs.getRiskTier(infractions);
+
+                if (risk.count > 0 || warns.length > 0) {
+                    description += `\n\n### ${t('commands:user.infraction_assessment') || 'Infraction Assessment'}`;
+                    description += `\n${e.blurple_mod} **${t('commands:user.risk_tier') || 'Risk Tier'}:** ${risk.name}`;
+                    description += `\n-# ${t('commands:user.recent_infractions', { count: risk.count }) || `${risk.count} infractions in the last 45 days.`}`;
+
+                    if (warns.length > 0) {
+                        description += `\n\n**${t('commands:user.active_warnings') || 'Active Warnings'}**`;
+                        const recentWarns = warns.slice(-3).reverse();
+                        for (const w of recentWarns) {
+                            const truncatedReason = funcs.truncate(w.reason, 60);
+                            description += `\n-# ${e.reply} ${truncatedReason} • <t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:R>`;
+                        }
+                    }
+                }
+            } catch (err) {
+                //
+            }
         }
     }
 
@@ -276,3 +304,5 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
 
     return interaction.editReply({ content: null, components: [container], flags: MessageFlags.IsComponentsV2 });
 }
+
+// contributors: @relentiousdragon
