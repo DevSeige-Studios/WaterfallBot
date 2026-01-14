@@ -115,13 +115,6 @@ module.exports = {
                                     const { ContainerBuilder, SectionBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags } = require('discord.js');
                                     const funcs = require("./util/functions.js");
 
-                                    function formatDuration(seconds) {
-                                        if (seconds < 60) return `${seconds}s`;
-                                        if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-                                        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-                                        return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
-                                    }
-
                                     const dailyData = [];
                                     const labels = [];
                                     for (let i = 29; i >= 0; i--) {
@@ -145,7 +138,7 @@ module.exports = {
                                     const cardBuffer = await graphRenderer.renderStatsCard({
                                         stats: [
                                             { label: t('commands:serverstats.total_messages', { days: 30 }), value: funcs.abbr(totalMessages), color: graphRenderer.COLORS.accent },
-                                            { label: t('commands:serverstats.voice_time'), value: formatDuration(totalVoice), color: graphRenderer.COLORS.success },
+                                            { label: t('commands:serverstats.voice_time'), value: funcs.formatDurationPretty(totalVoice * 1000), color: graphRenderer.COLORS.success },
                                             { label: t('commands:serverstats.members'), value: funcs.abbr(memberCount || 0) }
                                         ],
                                         title: t('commands:serverstats.export_summary_title'),
@@ -210,3 +203,6 @@ module.exports = {
         }
     }
 };
+
+
+// contributors: @relentiousdragon

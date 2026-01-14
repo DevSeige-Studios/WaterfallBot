@@ -8,6 +8,7 @@ const logger = require("./logger.js");
 
 const botFilePath = path.join(__dirname, "shardManager.js");
 const settingsPath = path.join(__dirname, "util", "settings.json");
+const settingsExamplePath = path.join(__dirname, "util", "settings.json.example");
 
 let botProcess = null;
 let restartCount = 0;
@@ -104,6 +105,221 @@ function checkVersion() {
         }
     } catch (err) {
         logger.error(`Error during version check: ${err.message}`);
+    }
+}
+
+async function checkCreditsEmojis() {
+    if (!fs.existsSync(settingsPath)) return;
+
+    const token = process.env.token;
+    const clientId = process.env.CLIENT_ID;
+
+    if (!token || !clientId) {
+        logger.warn("[Credits] Missing token or CLIENT_ID, skipping emoji upload.");
+        return;
+    }
+
+    try {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+
+        if (!settings.c_emojis) {
+            logger.warn("[Credits] c_emojis key missing in settings.json. Initializing from example...");
+            if (fs.existsSync(settingsExamplePath)) {
+                try {
+                    const exampleSettings = JSON.parse(fs.readFileSync(settingsExamplePath, "utf8"));
+                    settings.c_emojis = exampleSettings.c_emojis || {};
+                    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4), "utf8");
+                } catch (exErr) {
+                    logger.error(`[Credits] Failed to read settings.json.example: ${exErr.message}`);
+                    return;
+                }
+            } else {
+                logger.error("[Credits] settings.json.example not found. Cannot initialize c_emojis.");
+                return;
+            }
+        }
+
+        const creditsDir = path.join(__dirname, "assets", "credits");
+        const uploadedEmojis = [];
+        const missingAssets = [];
+
+        for (const [key, value] of Object.entries(settings.c_emojis)) {
+            if (value !== "?") continue;
+
+            const parts = key.split("_");
+            const user = parts.slice(0, -1).join("_");
+            const num = parts[parts.length - 1];
+
+            let assetPath = path.join(creditsDir, user, `${num}.png`);
+            let mimeType = "image/png";
+
+            if (!fs.existsSync(assetPath)) {
+                assetPath = path.join(creditsDir, user, `${num}.jpeg`);
+                mimeType = "image/jpeg";
+            }
+
+            if (!fs.existsSync(assetPath)) {
+                missingAssets.push(key);
+                continue;
+            }
+
+            try {
+                const imageBuffer = fs.readFileSync(assetPath);
+                const base64Image = imageBuffer.toString("base64");
+                const dataUri = `data:${mimeType};base64,${base64Image}`;
+
+                const response = await fetch(`https://discord.com/api/v10/applications/${clientId}/emojis`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bot ${token}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        name: key.replace(/[^a-zA-Z0-9_]/g, "_"),
+                        image: dataUri
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    settings.c_emojis[key] = data.id;
+                    uploadedEmojis.push({ name: key, id: data.id });
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    logger.warn(`[Credits] Failed to upload ${key}: ${errData.message || response.status}`);
+                }
+            } catch (uploadErr) {
+                logger.warn(`[Credits] Upload error for ${key}: ${uploadErr.message}`);
+            }
+        }
+
+        for (const asset of missingAssets) {
+            logger.warn(`[Credits] Missing asset for: ${asset}`);
+        }
+
+        if (uploadedEmojis.length > 0) {
+            fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4), "utf8");
+
+            if (uploadedEmojis.length <= 5) {
+                for (const emoji of uploadedEmojis) {
+                    logger.warnAlert(`[Credits] Uploaded emoji: ${emoji.name} (ID: ${emoji.id})`);
+                }
+            } else {
+                logger.warnAlert(`[Credits] ${uploadedEmojis.length} assets were uploaded to Discord as emojis.`);
+            }
+        }
+    } catch (err) {
+        logger.error(`[Credits] Error during emoji check: ${err.message}`);
+    }
+}
+
+async function checkAvatarEmojis() {
+    if (!fs.existsSync(settingsPath)) return;
+
+    const token = process.env.token;
+    const clientId = process.env.CLIENT_ID;
+
+    if (!token || !clientId) {
+        logger.warn("[Avatars] Missing token or CLIENT_ID, skipping emoji upload.");
+        return;
+    }
+
+    try {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+
+        if (!settings.a_emojis) {
+            logger.warn("[Avatars] a_emojis key missing in settings.json. Initializing from example...");
+            if (fs.existsSync(settingsExamplePath)) {
+                try {
+                    const exampleSettings = JSON.parse(fs.readFileSync(settingsExamplePath, "utf8"));
+                    settings.a_emojis = exampleSettings.a_emojis || {};
+                    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4), "utf8");
+                } catch (exErr) {
+                    logger.error(`[Avatars] Failed to read settings.json.example: ${exErr.message}`);
+                    return;
+                }
+            } else {
+                logger.error("[Avatars] settings.json.example not found. Cannot initialize a_emojis.");
+                return;
+            }
+        }
+
+        const avatarsDir = path.join(__dirname, "assets", "avatars-split");
+        const uploadedEmojis = [];
+        const missingAssets = [];
+
+        for (const [key, value] of Object.entries(settings.a_emojis)) {
+            if (value !== "?") continue;
+
+            const parts = key.split("_");
+            const style = parts.slice(0, -1).join("_");
+            const num = parts[parts.length - 1];
+
+            let assetPath = path.join(avatarsDir, style, `${num}.png`);
+            let mimeType = "image/png";
+
+            if (!fs.existsSync(assetPath)) {
+                assetPath = path.join(avatarsDir, style, `${num}.webp`);
+                mimeType = "image/webp";
+            }
+
+            if (!fs.existsSync(assetPath)) {
+                assetPath = path.join(avatarsDir, style, `${num}.jpeg`);
+                mimeType = "image/jpeg";
+            }
+
+            if (!fs.existsSync(assetPath)) {
+                missingAssets.push(key);
+                continue;
+            }
+
+            try {
+                const imageBuffer = fs.readFileSync(assetPath);
+                const base64Image = imageBuffer.toString("base64");
+                const dataUri = `data:${mimeType};base64,${base64Image}`;
+
+                const response = await fetch(`https://discord.com/api/v10/applications/${clientId}/emojis`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bot ${token}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        name: `avatar_${key}`.replace(/[^a-zA-Z0-9_]/g, "_"),
+                        image: dataUri
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    settings.a_emojis[key] = data.id;
+                    uploadedEmojis.push({ name: key, id: data.id });
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    logger.warn(`[Avatars] Failed to upload ${key}: ${errData.message || response.status}`);
+                }
+            } catch (uploadErr) {
+                logger.warn(`[Avatars] Upload error for ${key}: ${uploadErr.message}`);
+            }
+        }
+
+        for (const asset of missingAssets) {
+            logger.warn(`[Avatars] Missing asset for: ${asset}`);
+        }
+
+        if (uploadedEmojis.length > 0) {
+            fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4), "utf8");
+
+            if (uploadedEmojis.length <= 5) {
+                for (const emoji of uploadedEmojis) {
+                    logger.warnAlert(`[Avatars] Uploaded emoji: ${emoji.name} (ID: ${emoji.id})`);
+                }
+            } else {
+                logger.warnAlert(`[Avatars] ${uploadedEmojis.length} avatar assets were uploaded to Discord as emojis.`);
+            }
+        }
+    } catch (err) {
+        logger.error(`[Avatars] Error during emoji check: ${err.message}`);
     }
 }
 
@@ -289,6 +505,8 @@ async function initialize() {
     checkVersion();
     try {
         await mongoose.init();
+        await checkCreditsEmojis();
+        await checkAvatarEmojis();
         startBot();
         setupConsole();
     } catch (error) {
@@ -360,3 +578,6 @@ process.on("unhandledRejection", (reason) => {
     logger.fatal("Unhandled Rejection:", reason);
     shutdown("unhandledRejection");
 });
+
+
+// contributors: @relentiousdragon

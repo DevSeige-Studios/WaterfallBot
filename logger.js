@@ -87,7 +87,7 @@ function buildWebhookURL(arr) {
 }
 const webhookFatal = buildWebhookURL(settings.logWebhook2);
 
-async function sendWebhookImmediate(url, message, level = "INFO") {
+async function sendWebhookImmediate(url, message, level = "INFO", options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     const isCanary = process.env.CANARY === 'true';
@@ -100,20 +100,26 @@ async function sendWebhookImmediate(url, message, level = "INFO") {
     else if (level === "WARN") color = 0xFACC15;
     else if (level === "SUCCESS") color = 0x4ADE80;
 
+    const body = {
+        username: "Waterfall",
+        embeds: [{
+            title: `${titlePrefix}: ${level}`,
+            description: `\`\`\`diff\n${message}\n\`\`\``,
+            color: color,
+            timestamp: new Date().toISOString(),
+            footer: { text: footerText }
+        }]
+    };
+
+    if (options.silent) {
+        body.flags = 4096;
+    }
+
     try {
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                username: "Waterfall",
-                embeds: [{
-                    title: `${titlePrefix}: ${level}`,
-                    description: `\`\`\`diff\n${message}\n\`\`\``,
-                    color: color,
-                    timestamp: new Date().toISOString(),
-                    footer: { text: footerText }
-                }]
-            }),
+            body: JSON.stringify(body),
             signal: controller.signal
         });
         return response;
@@ -144,7 +150,7 @@ const logger = {
     fatal: (...args) => {
         const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(" ");
         pinoLogger.fatal(getContextMsg(msg));
-        logger.alertSync(msg, "FATAL");
+        logger.alertSync(msg, "FATAL", { silent: false });
     },
 
     debug: (...args) => {
@@ -169,17 +175,22 @@ const logger = {
     warnAlert: (...args) => {
         const msg = args.join(" ");
         logger.warn(msg);
-        logger.alertSync(msg, "WARN");
+        logger.alertSync(msg, "WARN", { silent: false });
     },
 
-    alert: (msg, level = "INFO") => {
-        logger.alertSync(msg, level);
+    alert: (msg, level = "INFO", options = {}) => {
+        logger.alertSync(msg, level, { silent: false, ...options });
     },
 
-    alertSync: async (msg, level = "INFO") => {
+    silentAlert: (msg, level = "INFO") => {
+        logger.alertSync(msg, level, { silent: true });
+    },
+
+    alertSync: async (msg, level = "INFO", options = {}) => {
         if (!webhookFatal) return;
         try {
-            await sendWebhookImmediate(webhookFatal, msg, level);
+            const finalOptions = { silent: true, ...options };
+            await sendWebhookImmediate(webhookFatal, msg, level, finalOptions);
         } catch (err) {
             console.error("webhook failed:", err.message);
         }
@@ -194,3 +205,6 @@ const logger = {
 };
 //
 module.exports = logger;
+
+
+// contributors: @relentiousdragon

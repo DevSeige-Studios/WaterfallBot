@@ -61,3 +61,6 @@ process.on('message', (message) => {
         manager.shards.forEach(shard => shard.send({ type: 'reload-events' }));
     }
 });
+
+
+// contributors: @relentiousdragon

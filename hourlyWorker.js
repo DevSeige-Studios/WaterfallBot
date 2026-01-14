@@ -1,9 +1,11 @@
-const Discord = require("discord.js");
+const { ContainerBuilder, SectionBuilder, TextDisplayBuilder, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder, WebhookClient } = require("discord.js");
 const Lock = require("./schemas/lock.js");
 const LOCK_KEY = "hourlyIncomeLock";
 const moment = require("moment");
 const funcs = require("./util/functions.js");
 const logger = require("./logger.js");
+const { i18n } = require("./util/i18n.js");
+const users = require("./schemas/users.js");
 const GlobalMail = require("./schemas/global_mails.js");
 const settings = require("./util/settings.json");
 const e = require("./data/emoji.js");
@@ -48,11 +50,61 @@ module.exports = {
 
         try {
             const now = new Date();
+            const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000));
+
+            const reminders = await users.find({
+                "preferences.notifications.vote": "DM",
+                voteReminderSent: false,
+                lastVote: { $lte: twelveHoursAgo }
+            });
+
+            const voteUrl = "https://top.gg/bot/1435231722714169435/vote";
+
+            for (const user of reminders) {
+                try {
+                    const discordUser = await bot.users.fetch(user.userID);
+                    if (discordUser) {
+                        const userLocale = user.locale || 'en';
+                        const msgContent = i18n.getFixedT(userLocale)('events:interaction.vote_reminder_dm', { user: `<@${user.userID}>`, voteUrl: voteUrl });
+
+                        const container = new ContainerBuilder()
+                            .setAccentColor(0x5865F2)
+                            .addSectionComponents(
+                                new SectionBuilder()
+                                    .addTextDisplayComponents(
+                                        new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${i18n.getFixedT(userLocale)('commands:vote.reminders_title')}`),
+                                        new TextDisplayBuilder().setContent(msgContent)
+                                    )
+                                    .setButtonAccessory(
+                                        new ButtonBuilder()
+                                            .setLabel("Vote Now")
+                                            .setStyle(ButtonStyle.Link)
+                                            .setURL(voteUrl)
+                                    )
+                            );
+
+                        try {
+                            await discordUser.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
+                            user.voteReminderSent = true;
+                            await user.save();
+                        } catch (sendErr) {
+                            logger.debug(`Failed to send vote DM to ${user.userID}, switching to INTERACTION:`, sendErr);
+                            user.preferences.notifications.vote = "INTERACTION";
+                            user.preferences.notifications.voteNotice = true;
+                            user.voteReminderSent = false;
+                            await user.save();
+                        }
+                    }
+                } catch (err) {
+                    logger.debug(`Failed to process vote reminder for ${user.userID}:`, err);
+                }
+            }
+
             const expiredMails = await GlobalMail.find({ expiry: { $lte: now } });
-            const logWebhook = new Discord.WebhookClient({ id: settings.logWebhook[0], token: settings.logWebhook[1] });
+            const logWebhook = new WebhookClient({ id: settings.logWebhook[0], token: settings.logWebhook[1] });
             for (const mail of expiredMails) {
                 try {
-                    const previewEmbed = new Discord.EmbedBuilder()
+                    const previewEmbed = new EmbedBuilder()
                         .setColor(mail.color || 0x3498DB)
                         .setTitle(mail.title || "Expired Mail")
                         .setDescription(mail.message || "[No content]")
@@ -74,3 +126,6 @@ module.exports = {
         }
     }
 };
+
+
+// contributors: @relentiousdragon

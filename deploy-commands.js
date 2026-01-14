@@ -93,7 +93,8 @@ async function deployCommands() {
                 }
             );
 
-            logger.neon("\x1b[36m%s\x1b[0m", 'Successfully posted commands to discordbotlist.com:', dblResponse.data);
+            logger.neon('Successfully posted commands to discordbotlist.com:');
+            logger.info(dblResponse.data)
         }
     } catch (error) {
         if (error.response) {
@@ -111,3 +112,6 @@ if (require.main === module) {
 }
 
 module.exports = { deployCommands };
+
+
+// contributors: @relentiousdragon
