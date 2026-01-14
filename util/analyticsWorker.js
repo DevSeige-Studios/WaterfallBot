@@ -843,9 +843,11 @@ module.exports = {
     init: (bot, botSettings) => {
         client = bot;
         settings = botSettings;
-        setInterval(() => flushData(bot), FLUSH_INTERVAL);
-        updateTopCommandsCache();
-        setInterval(updateTopCommandsCache, CACHE_TTL);
+        if (process.env.CANARY !== 'true') {
+            setInterval(() => flushData(bot), FLUSH_INTERVAL);
+            updateTopCommandsCache();
+            setInterval(updateTopCommandsCache, CACHE_TTL);
+        }
     },
     trackMessage: () => {
         messageCount++;
