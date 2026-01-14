@@ -1,5 +1,5 @@
-const { Server } = require("../../schemas/servers.js"); 
-const { PermissionsBitField } = require("discord.js"); 
+const { Server } = require("../../schemas/servers.js");
+const { PermissionsBitField } = require("discord.js");
 const logger = require("../../logger.js");
 //
 module.exports.run = async (bot, message, args, funcs, prefix) => {
@@ -37,3 +37,6 @@ module.exports.help = {
     name: "prefix",
     aliases: ["p"]
 };
+
+
+// contributors: @relentiousdragon

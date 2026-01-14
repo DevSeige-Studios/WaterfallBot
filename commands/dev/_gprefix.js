@@ -10,7 +10,7 @@ module.exports.run = async (bot, message, args, funcs, prefix) => {
 
     const newPrefix = args[0];
     if (!newPrefix || newPrefix.length !== 1) {
-         return message.channel.send(`Please provide a valid prefix (1 character). Example: **${prefix}_gprefix ;**`);
+        return message.channel.send(`Please provide a valid prefix (1 character). Example: **${prefix}_gprefix ;**`);
     }
 
     settings.prefix = newPrefix;
@@ -29,3 +29,6 @@ module.exports.help = {
     dev: true,
     aliases: ["_gp"]
 };
+
+
+// contributors: @relentiousdragon
