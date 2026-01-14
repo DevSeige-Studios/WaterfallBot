@@ -10,7 +10,52 @@ const playerSessions = new Map();
 const failedPlayers = new Set();
 
 let expirationInterval = null;
+let syncInterval = null;
 let initialized = false;
+
+async function syncFromDb() {
+    try {
+        const doc = await Hangman.findById('current');
+        if (doc) {
+            if (!currentWord || doc.setAt !== currentWord.setAt || doc.expiresAt !== currentWord.expiresAt) {
+                currentWord = {
+                    word: doc.word,
+                    description: doc.description,
+                    setByUserId: doc.setByUserId,
+                    setByUsername: doc.setByUsername,
+                    setAt: doc.setAt,
+                    expiresAt: doc.expiresAt,
+                    solved: doc.solved,
+                    attempts: doc.attempts,
+                    winners: doc.winners || [],
+                    firstWinner: doc.firstWinner?.userId ? doc.firstWinner : null
+                };
+
+                failedPlayers.clear();
+                doc.failedPlayers?.forEach(id => failedPlayers.add(id));
+
+                if (doc.pendingWord?.word) {
+                    pendingWord = {
+                        word: doc.pendingWord.word,
+                        description: doc.pendingWord.description,
+                        setByUserId: doc.pendingWord.setByUserId,
+                        setByUsername: doc.pendingWord.setByUsername
+                    };
+                } else {
+                    pendingWord = null;
+                }
+                logger.debug('[Hangman] Synced state from database');
+            }
+        } else {
+            currentWord = null;
+            pendingWord = null;
+            playerSessions.clear();
+            failedPlayers.clear();
+        }
+    } catch (error) {
+        logger.error('[Hangman] Failed to sync state from database:', error);
+    }
+}
 
 async function init(bot) {
     if (initialized) return;
@@ -67,6 +112,18 @@ async function init(bot) {
     }
 
     startExpirationCheck(bot);
+    startSyncInterval();
+}
+
+function startSyncInterval() {
+    if (syncInterval) clearInterval(syncInterval);
+
+    syncInterval = setInterval(async () => {
+        const isMasterShard = process.env.CANARY !== 'true' && (process.env.SHARD_ID === '0' || !process.env.SHARD_ID);
+        if (!isMasterShard) {
+            await syncFromDb();
+        }
+    }, 60000);
 }
 
 async function saveToDb() {
@@ -259,6 +316,7 @@ async function recordFail(userId) {
 }
 
 async function logWinner(bot, userId, username, solveTime) {
+    if (process.env.CANARY === 'true') return;
     try {
         const webhook = new WebhookClient({
             id: settings.logWebhook[0],
@@ -291,6 +349,7 @@ async function logWinner(bot, userId, username, solveTime) {
 }
 
 async function sendWordSummary(bot, reason = 'expired') {
+    if (process.env.CANARY === 'true') return;
     if (!currentWord) return;
 
     try {
@@ -343,6 +402,9 @@ function startExpirationCheck(bot) {
     if (expirationInterval) {
         clearInterval(expirationInterval);
     }
+
+    const isMasterShard = process.env.CANARY !== 'true' && (process.env.SHARD_ID === '0' || !process.env.SHARD_ID);
+    if (!isMasterShard) return;
 
     expirationInterval = setInterval(async () => {
         if (currentWord && Date.now() > currentWord.expiresAt) {
