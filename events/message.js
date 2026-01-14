@@ -7,6 +7,7 @@ const { ServerStats } = require("../schemas/serverStats.js");
 const users = require("../schemas/users.js");
 const { i18n } = require("../util/i18n.js");
 const analyticsWorker = require("../util/analyticsWorker.js");
+const botDetection = require("../util/botDetection.js");
 const cooldowns = new Map();
 const alertCooldowns = new Map();
 const adminCommands = ["prefix", "p"];
@@ -42,13 +43,87 @@ async function isStatsEnabled(guildId) {
     statsEnabledCache.set(guildId, { enabled, excludedChannels, timestamp: Date.now() });
     return enabled;
 }
+
+async function trackBotDetection(message) {
+    if (!message.guild || message.author.bot) return;
+
+    try {
+        const settings = await botDetection.getSettings(message.guild.id);
+        if (!settings?.enabled) return;
+
+        const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+        if (member && (Date.now() - member.joinedTimestamp) < 2 * 60 * 60 * 1000) {
+            const spamCheck = await botDetection.checkCrossChannelLinkSpam(message, settings);
+
+            if (spamCheck.isSpam) {
+                logger.debug(`[BotDetection] Spam detected for ${message.author.id}. Actions: Delete=${spamCheck.messages.length} msgs, Timeout=${settings.allowTimeout}, Log=${settings.logAlerts}`);
+
+                if (spamCheck.messages?.length > 0) {
+                    for (const msgInfo of spamCheck.messages) {
+                        try {
+                            const channel = message.guild.channels.cache.get(msgInfo.channelID);
+                            if (channel) {
+                                const msg = await channel.messages.fetch(msgInfo.messageID).catch(() => null);
+                                if (msg) await msg.delete().catch(() => { });
+                            }
+                        } catch (e) {
+                            //
+                        }
+                    }
+                }
+
+                const timeoutDuration = (settings.allowTimeout && settings.checks.messageBehavior) ?
+                    (settings.timeoutDuration || 60 * 1000) : 60 * 1000;
+
+                try {
+                    await member.timeout(timeoutDuration, `[Bot Detection] Cross-channel link spam detected`);
+                } catch (e) {
+                    logger.debug(`[BotDetection] Failed to timeout ${message.author.id}: ${e.message}`);
+                }
+
+                if (settings.logAlerts) {
+                    const modLog = require("../util/modLog.js");
+                    await modLog.logEvent(message.client, message.guild.id, 'botDetectionAlert', {
+                        member: member,
+                        confidence: 100,
+                        reasons: spamCheck.reasons,
+                        globalInfractions: 0,
+                        riskLevel: 'high'
+                    });
+                }
+            }
+        }
+
+        const urlRegex = /(https?:\/\/[^\s]+)/gi;
+        const linksCount = (message.content.match(urlRegex) || []).length;
+        const mentionCount = message.mentions.users.size + message.mentions.roles.size;
+        const contentHash = message.content.length > 20 ? message.content.substring(0, 50).toLowerCase().replace(/\s/g, '') : null;
+
+        await botDetection.updateTracking(message.guild.id, message.author.id, {
+            channelID: message.channel.id,
+            linksCount,
+            mentionCount,
+            contentHash
+        });
+    } catch (error) {
+        //
+    }
+}
 //
 module.exports = {
     name: "messageCreate",
     execute: async (bot, message) => {
         if (message.author.bot) return;
 
-        analyticsWorker.trackMessage();
+        const isDM = !message.guild;
+        const isBotMentioned = message.mentions.has(bot.user);
+        const serverData = message.guild ? await getServerData(message.guild.id) : null;
+        const prefix = serverData?.prefix || settings.prefix;
+        const startsWithPrefix = message.content.startsWith(prefix);
+
+        if (isDM || isBotMentioned || startsWithPrefix) {
+            analyticsWorker.trackMessage();
+        }
 
         if (message.guild && process.env.CANARY !== 'true') {
             isStatsEnabled(message.guild.id).then(async (enabled) => {
@@ -64,6 +139,8 @@ module.exports = {
                     }
                 }
             });
+
+            trackBotDetection(message).catch(() => { });
         }
         const locale = message.guild ? message.guild.preferredLocale : 'en';
         const t = i18n.getFixedT(locale);
@@ -80,14 +157,6 @@ module.exports = {
         }
 
         return;
-        const serverData = await getServerData(message.guild.id);
-        const prefix = serverData ? serverData.prefix : settings.prefix;
-
-        // settings = getSettings(); 
-
-        const isBotMentioned = message.content === `<@${bot.user.id}>`;
-        if (!message.content.startsWith(prefix) && !isBotMentioned) return;
-
         const args = message.content.substring(prefix.length).trim().split(/ +/g);
         const commandName = args.shift().toLowerCase();
         const command = bot.commands.get(commandName) || bot.commands.find(cmd => cmd.help.aliases && cmd.help.aliases.includes(commandName));
@@ -172,3 +241,6 @@ module.exports = {
         }
     }
 };
+
+
+// contributors: @relentiousdragon

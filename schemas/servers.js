@@ -6,6 +6,9 @@ const serverSchema = mongoose.Schema({
     language: { type: String, default: "en" },
     botProfile: { type: String, default: "default" },
     botProfileLastUpdate: { type: Number, default: 0 },
+    lastWelcomeMessage: { type: Number, default: 0 },
+    serverStatsOverviewLastUpdate: { type: Number, default: 0 },
+    serverStatsActivityLastUpdate: { type: Number, default: 0 },
     banned: { type: Boolean, default: false },
     logs: {
         messages: { channelId: String, webhook: [String] },
@@ -33,6 +36,16 @@ const serverSchema = mongoose.Schema({
         enabled: { type: Boolean, default: false },
         excludedChannels: [String]
     },
+    recentBans: [{
+        userID: String,
+        bannedAt: { type: Date, default: Date.now }
+    }],
+    memberStats: {
+        totalMembers: { type: Number, default: 0 },
+        botCount: { type: Number, default: 0 },
+        messageCount30d: { type: Number, default: 0 },
+        lastUpdated: { type: Date, default: null }
+    },
     pendingDeletion: { type: Date, default: null }
 }, { versionKey: false });
 
@@ -42,3 +55,6 @@ serverSchema.index({ pendingDeletion: 1 });
 module.exports = {
     Server: mongoose.model("servers", serverSchema)
 };
+
+
+// contributors: @relentiousdragon

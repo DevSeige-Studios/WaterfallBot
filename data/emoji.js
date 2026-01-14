@@ -1,4 +1,4 @@
-module.exports = {
+const emojis = {
   // UTILITY
   lightning_red: "<:i:1439628516902699181>",
   lightning_orange: "<:i:1439628488444481620>",
@@ -91,23 +91,30 @@ module.exports = {
   slash_command: "<:i:1442579073456013312>",
   trash_can: "<:i:1442579071258202112>",
   member: "<:i:1442579068850671744>",
+  email: "<:at:1456266012323479716>",
   // APP ICONS
-  icon_bing: "<:bing:1439628469381365872>",
-  icon_google: "<:google:1439628466789154846>",
-  icon_brave: "<:brave:1439628463563870218>",
-  icon_duckduckgo: "<:duckduckgo:1439628440704909482>",
+  icon_bing: "<:Bing:1439628469381365872>",
+  icon_google: "<:Google:1439628466789154846>",
+  icon_brave: "<:Brave:1439628463563870218>",
+  icon_duckduckgo: "<:Duckduckgo:1439628440704909482>",
   icon_discord_pixel: "<:discord:1439628407800598740>",
-  icon_github: "<:github:1442561562094075986>",
-  icon_yahoo: "<:yahoo:1449370756738711612>",
-  icon_githubDesktop: "<:github:1439628284261564607>",
-  icon_discord: "<:discord:1442561532918501376>",
+  icon_github: "<:Github:1442561562094075986>",
+  icon_yahoo: "<:Yahoo:1449370756738711612>",
+  icon_githubDesktop: "<:Github:1439628284261564607>",
+  icon_discord: "<:Discord:1442561532918501376>",
   icon_gemini1: "<:i:1447879552796983409>",
   icon_gemini2: "<:i:1447879556861001738>",
-  icon_yandex: "<:yandex:1450112210683826309>",
-  icon_gibiru: "<:gibiru:1450112206044921988>",
-  icon_ecosia: "<:ecosia:1450112202232041644>",
-  icon_swisscows: "<:swisscows:1450112197308055765>",
-  icon_qwant: "<:qwant:1450112193306820680>",
+  icon_yandex: "<:Yandex:1450112210683826309>",
+  icon_gibiru: "<:Gibiru:1450112206044921988>",
+  icon_ecosia: "<:Ecosia:1450112202232041644>",
+  icon_swisscows: "<:Swisscows:1450112197308055765>",
+  icon_qwant: "<:Qwant:1450112193306820680>",
+  icon_twitter: "<:X:1456266186210807901>",
+  icon_youtube: "<:YouTube:1456266026286321725>",
+  icon_reddit: "<:Reddit:1456266020644851865>",
+  icon_facebook: "<:Facebook:1456266018463940659>",
+  icon_linkedIn: "<:LinkedIn1456266014395207733>",
+  icon_instagram: "<:instagram:1456266764525633690>",
   icon_wikipedia: "",
   icon_stackoverflow: "",
   // BADGES
@@ -145,3 +152,26 @@ module.exports = {
   badge_moderator4: "<:i:1444030862571339896>",
   badge_moderator5: "<:i:1444030859584864419>",
 };
+//
+module.exports = new Proxy(emojis, {
+  get(target, prop) {
+    if (prop === "raw") {
+      return target;
+    }
+    if (process.env.CANARY === "true") {
+      const val = target[prop];
+      if (val && typeof val === "string") {
+        return {
+          __v: val,
+          __isEmoji: true,
+          toString: () => "",
+          [Symbol.toPrimitive]: () => ""
+        };
+      }
+      return val || "";
+    }
+    return target[prop];
+  },
+});
+
+// contributors: @relentiousdragon

@@ -31,3 +31,6 @@ const shardStatsSchema = mongoose.Schema({
 }, { versionKey: false });
 
 module.exports = mongoose.model("shardStats", shardStatsSchema);
+
+
+// contributors: @relentiousdragon

@@ -10,3 +10,6 @@ const globalMailSchema = mongoose.Schema({
 }, { versionKey: false });
 
 module.exports = mongoose.model("global_mails", globalMailSchema);
+
+
+// contributors: @relentiousdragon

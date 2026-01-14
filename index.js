@@ -1,4 +1,5 @@
-const { Client, GatewayIntentBits, Partials, WebhookClient, Events, ActivityType, Collection } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, WebhookClient, Events, ActivityType, Collection, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
+const { i18n } = require("./util/i18n.js");
 const path = require("path");
 const requireAll = require("require-all");
 const fs = require("fs");
@@ -79,21 +80,68 @@ if (shardId == 0) {
         const { user, type } = req.body;
 
         if (type === "test")
-            logger.info("Vote Webhook: Test Vote Initiated");
+            logger.info("[Vote Webhook] Test Vote Initiated");
         else if (type !== "upvote")
             return res.status(400).send("Invalid vote type");
 
         try {
             let data = await users.findOne({ userID: user });
-            if (!data) return res.status(200).send("Vote OK (user has no restaurant)");
+            if (!data) return res.status(200).send("Vote OK (user missing in db)");
 
             data.lastVote = Date.now();
+            data.voteReminderSent = false;
             await data.save();
 
-            logger.info("Vote Webhook: A User has Successfully Voted!");
-            return res.status(200).send("Vote OK");
+            logger.debug(`[Vote Webhook] A User has Successfully Voted! (${user})`);
+            res.status(200).send("Vote OK");
+
+            const voteThanksPref = data.preferences?.notifications?.voteThanks || "DM";
+            if (voteThanksPref === "DM") {
+                try {
+                    const discordUser = await bot.users.fetch(user);
+                    if (discordUser) {
+                        const userLocale = data.locale || 'en';
+                        const t = i18n.getFixedT(userLocale);
+
+                        const container = new ContainerBuilder()
+                            .setAccentColor(0x5865F2)
+                            .addSectionComponents(
+                                new SectionBuilder()
+                                    .addTextDisplayComponents(
+                                        new TextDisplayBuilder().setContent(`# ${e.gift} ${t('commands:preferences.vote_thanks_title')}`),
+                                        new TextDisplayBuilder().setContent(t('events:interaction.vote_thanks_dm'))
+                                    )
+                            );
+
+                        if ((data.preferences?.notifications?.vote || "OFF") === "OFF") {
+                            container.addSectionComponents(
+                                new SectionBuilder()
+                                    .addTextDisplayComponents(
+                                        new TextDisplayBuilder().setContent(`-# ${t('commands:vote.reminders_description')}`)
+                                    )
+                                    .setButtonAccessory(
+                                        new ButtonBuilder()
+                                            .setCustomId(`vote_enable_reminders_${user}`)
+                                            .setLabel(t('commands:vote.enable_reminders'))
+                                            .setStyle(ButtonStyle.Success)
+                                            .setEmoji(funcs.parseEmoji(e.yellow_point))
+                                    )
+                            );
+                        }
+                        container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
+                        container.addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(`-# ${t('events:interaction.vote_thanks_footer')}`)
+                        )
+
+                        await discordUser.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
+                    }
+                } catch (err) {
+                    logger.debug(`Failed to send vote thanks DM to ${user}:`, err);
+                }
+            }
+            return;
         } catch (error) {
-            logger.error("Vote Webhook Error:", error);
+            logger.error("[Vote Webhook] Error:", error);
             return res.status(500).send("Internal error");
         }
     });
@@ -245,7 +293,104 @@ if (shardId === 0 && process.env.CANARY !== "true") {
             res.status(500).json({ ok: false, error: "Internal Server Error" });
         }
     });
+
+    const growthCache = {};
+
+    app.get("/api/growth", shardsLimiter, async (req, res) => {
+        try {
+            const range = req.query.range || "7d";
+
+            if (growthCache[range] && growthCache[range].expires > Date.now()) {
+                return res.json(growthCache[range].data);
+            }
+
+            const now = new Date();
+            let cutoffTime;
+            let intervalMs = 60 * 1000;
+
+            if (range === '24h') {
+                cutoffTime = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+            } else if (range === '7d') {
+                cutoffTime = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                intervalMs = 30 * 60 * 1000;
+            } else if (range === '30d') {
+                cutoffTime = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                intervalMs = 60 * 60 * 1000;
+            }
+
+            const shards = await ShardStats.aggregate([
+                {
+                    $project: {
+                        shardID: 1,
+                        guildHistory: {
+                            $filter: {
+                                input: "$guildHistory",
+                                as: "entry",
+                                cond: { $gte: ["$$entry.timestamp", cutoffTime] }
+                            }
+                        },
+                        userHistory: {
+                            $filter: {
+                                input: "$userHistory",
+                                as: "entry",
+                                cond: { $gte: ["$$entry.timestamp", cutoffTime] }
+                            }
+                        }
+                    }
+                }
+            ]).option({ maxTimeMS: 5000 });
+
+            const processHistory = (historyField) => {
+                const buckets = new Map();
+
+                shards.forEach(shard => {
+                    if (shard[historyField]) {
+                        shard[historyField].forEach(entry => {
+                            const entryTime = new Date(entry.timestamp);
+                            if (entryTime >= cutoffTime) {
+                                const time = Math.floor(entryTime.getTime() / intervalMs) * intervalMs;
+                                if (!buckets.has(time)) buckets.set(time, new Map());
+
+                                const shardMap = buckets.get(time);
+                                if (!shardMap.has(shard.shardID)) shardMap.set(shard.shardID, []);
+                                shardMap.get(shard.shardID).push(entry.count);
+                            }
+                        });
+                    }
+                });
+
+                return Array.from(buckets.entries())
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([timestamp, shardMap]) => {
+                        let total = 0;
+                        for (const counts of shardMap.values()) {
+                            const avg = counts.reduce((a, b) => a + b, 0) / counts.length;
+                            total += avg;
+                        }
+                        return { timestamp, count: Math.round(total) };
+                    });
+            };
+
+            const guildGrowth = processHistory('guildHistory');
+            const userGrowth = processHistory('userHistory');
+
+            const responseData = { ok: true, guildGrowth, userGrowth };
+
+            growthCache[range] = {
+                data: responseData,
+                expires: Date.now() + (60 * 1000)
+            };
+
+            res.json(responseData);
+
+        } catch (error) {
+            logger.error("Error fetching growth data:", error);
+            res.status(500).json({ ok: false, error: "Internal Server Error" });
+        }
+    });
 }
+
+
 
 app.listen(process.env.port, () => {
     logger.info(shardId === 0 ?
@@ -257,6 +402,7 @@ app.listen(process.env.port, () => {
         "Health Endpoint Started"
     );
 });
+
 async function updateShardMetrics() {
     if (process.env.CANARY === "true") {
         return;
@@ -287,11 +433,11 @@ async function updateShardMetrics() {
                 $push: {
                     guildHistory: {
                         $each: [{ count: guildCount, timestamp: new Date() }],
-                        $slice: -1000
+                        $slice: -50000
                     },
                     userHistory: {
                         $each: [{ count: userCount, timestamp: new Date() }],
-                        $slice: -1000
+                        $slice: -50000
                     }
                 }
             },
@@ -369,8 +515,8 @@ async function postStats() {
             { headers: { Authorization: process.env.TOPGG_TOKEN } }
         );
 
-        logger.info(`Stats posted successfully (Shard ${shardId})`, res.status);
-        logger.alert(`Stats posted successfully (Shard ${shardId}) ${res.status}`, "SUCCESS");
+        logger.debug(`Stats posted successfully (Shard ${shardId})`, res.status);
+        // logger.alert(`Stats posted successfully (Shard ${shardId}) ${res.status}`, "SUCCESS");
     } catch (err) {
         logger.error(
             "Failed to post Top.gg stats:",
@@ -411,6 +557,9 @@ bot.once(Events.ClientReady, async () => {
 
     const inviteTracker = require("./util/inviteTracker.js");
     bot.guilds.cache.forEach(guild => inviteTracker.cacheInvites(guild));
+
+    const hangmanState = require("./util/hangman_state.js");
+    hangmanState.init(bot).catch(e => logger.error("Hangman init failed:", e));
 });
 
 bot.on("error", e => logger.error("Discord Error", e));
@@ -533,6 +682,10 @@ function analyzeGitHubChanges(changedFiles) {
         "util/connect4_ai.js",
         "util/rps_ai.js",
         "util/inviteTracker.js",
+        "util/duckduckgo.js",
+        "util/analyticsWorker.js",
+        "util/botDetection.js",
+        "util/hangman_state.js",
         "schemas/",
         "hourlyWorker.js",
         "dailyWorker.js"
@@ -734,3 +887,6 @@ process.on('message', async (message) => {
         }
     }
 });
+
+
+// contributors: @relentiousdragon

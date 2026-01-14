@@ -22,12 +22,14 @@ module.exports = {
             if (!oldMessage.content && (!oldMessage.embeds || oldMessage.embeds.length === 0) &&
                 (!oldMessage.components || oldMessage.components.length === 0) && !isComponentsV2) return;
 
-            const dedupKey = `msgedit:${newMessage.guild?.id}:${newMessage.id}`;
-            await modLog.logEvent(bot, newMessage.guild.id, 'messageEdit', {
-                oldMessage: oldMessage,
-                newMessage: newMessage,
-                isComponentsV2: isComponentsV2
-            }, dedupKey);
+            if (newMessage.guild) {
+                const dedupKey = `msgedit:${newMessage.guild.id}:${newMessage.id}`;
+                await modLog.logEvent(bot, newMessage.guild.id, 'messageEdit', {
+                    oldMessage: oldMessage,
+                    newMessage: newMessage,
+                    isComponentsV2: isComponentsV2
+                }, dedupKey);
+            }
         } catch (error) {
             if (settings.debug === 'true') {
                 logger.error(`Error logging message edit event: ${error.message}`, error);
@@ -35,3 +37,6 @@ module.exports = {
         }
     }
 };
+
+
+// contributors: @relentiousdragon

@@ -52,3 +52,5 @@ module.exports = {
         }
     }
 };
+
+// contributors: @relentiousdragon

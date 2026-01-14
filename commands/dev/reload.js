@@ -46,3 +46,5 @@ module.exports.help = {
 	dev: true,
 	aliases: []
 };
+
+// contributors: @relentiousdragon

@@ -382,3 +382,5 @@ function createTTSResource(audioBuffer) {
 
 
 module.exports.handlePronunciationButton = handlePronunciationButton;
+
+// contributors: @relentiousdragon

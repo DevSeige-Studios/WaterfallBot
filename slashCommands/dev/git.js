@@ -6,8 +6,8 @@ const logger = require("../../logger.js");
 //
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("github")
-        .setDescription("GitHub repository management (DEV ONLY)")
+        .setName("git")
+        .setDescription("Github repository management (DEV ONLY)")
         .addSubcommand(subcommand =>
             subcommand
                 .setName("pull")
@@ -16,6 +16,8 @@ module.exports = {
             subcommand
                 .setName("status")
                 .setDescription("Check GitHub repository status")),
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
     dev: true,
     explicit: process.env.CANARY === "true" ? false : true,
     async execute(bot, interaction, funcs, settings, logger) {
@@ -34,7 +36,7 @@ module.exports = {
                 await this.checkStatus(interaction);
             }
         } catch (error) {
-            logger.error("Error executing github command:", error);
+            logger.error("Error executing git command:", error);
             return interaction.reply({ content: "An error occurred while executing the command.", flags: MessageFlags.Ephemeral });
         }
     },
@@ -167,6 +169,10 @@ module.exports = {
             "util/connect4_ai.js",
             "util/rps_ai.js",
             "util/inviteTracker.js",
+            "util/duckduckgo.js",
+            "util/analyticsWorker.js",
+            "util/botDetection.js",
+            "util/hangman_state.js",
             "schemas/",
             "hourlyWorker.js",
             "dailyWorker.js"
@@ -319,7 +325,7 @@ module.exports = {
         return null;
     },
     help: {
-        name: "github",
+        name: "git",
         description: "GitHub repository management commands",
         category: "Dev",
         permissions: ["Developer"],
@@ -327,3 +333,5 @@ module.exports = {
         created: 1764938508
     }
 };
+
+// contributors: @relentiousdragon

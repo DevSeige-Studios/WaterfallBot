@@ -169,3 +169,6 @@ async function flushUpdates(bot, guildId) {
         auditLogPermissionsMissing: auditLogPermissionsMissing
     }, `hierarchy:roles:${guildId}:${mover?.id || 'unknown'}`);
 }
+
+
+// contributors: @relentiousdragon

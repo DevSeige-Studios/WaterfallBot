@@ -16,12 +16,20 @@ function decodeHtmlEntities(str) {
 function normalizeMotd(m) {
     if (!m) return null;
     let t = null;
-    if (Array.isArray(m)) t = m.join("\n");
-    else if (typeof m === "object" && m.clean) {
-        if (Array.isArray(m.clean)) t = m.clean.join("\n");
-        else t = String(m.clean);
-    } else t = String(m);
-    return decodeHtmlEntities(t).trim();
+    if (Array.isArray(m)) {
+        t = m.join("\n");
+    } else if (typeof m === "object") {
+        const val = m.clean ?? m.raw ?? m.html;
+        if (val !== undefined && val !== null) {
+            if (Array.isArray(val)) t = val.join("\n");
+            else t = String(val);
+        } else {
+            t = String(m);
+        }
+    } else {
+        t = String(m);
+    }
+    return t ? decodeHtmlEntities(t).trim() : null;
 }
 
 function base64ToAttachment(base64, name = 'image.png') {
@@ -97,7 +105,7 @@ module.exports = {
                     const on = d.players?.online ?? 0;
                     const ver = d.version?.name ?? d.version ?? d.software ?? "Unknown";
                     const proto = d.protocol?.version ?? d.protocol ?? "Unknown";
-                    const motd = normalizeMotd(d.motd ?? d.motd?.clean ?? d.motd?.raw);
+                    const motd = normalizeMotd(d.motd?.clean ?? d.motd?.raw ?? d.motd);
                     const icon = d.icon || null;
                     return { online, max, on, ver, proto, motd, icon };
                 } catch {
@@ -146,7 +154,7 @@ module.exports = {
                             .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbURL))
                             .addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent(`# ${host}`),
-                                new TextDisplayBuilder().setContent(`-# ${isOnline ? `${e.green_point} **ONLINE**` : `${e.red_point} **OFFLINE**`}`)
+                                new TextDisplayBuilder().setContent(`-# ${isOnline ? `${e.green_point} **${t('common:online')}**` : `${e.red_point} **${t('common:offline')}**`}`)
                             )
                     )
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
@@ -229,19 +237,34 @@ module.exports = {
             let downloadUrl = `https://crafatar.com/skins/${p.uuid}`;
             let source = "Crafatar";
 
-            const crafatarImg = getCrafatarUrl(type, p.uuid);
-
-            try {
-                if (!crafatarImg) throw new Error("Invalid type for Crafatar");
-                await axios.head(crafatarImg, { timeout: 1500 });
-                images.push(crafatarImg);
-            } catch (err) {
-                source = "Mineskin";
-                const mineskinUrls = getMineskinUrls(type, p.uuid);
-                if (mineskinUrls.length > 0) {
-                    images = mineskinUrls;
-                    downloadUrl = `https://mineskin.eu/download/${p.uuid}`;
-                    logger.debug(`[Minecraft] Crafatar unreachable, using Mineskin fallback for ${type}`);
+            if (type === "cape") {
+                try {
+                    const r = await axios.get(`https://starlightskins.lunareclipse.studio/info/user/${p.uuid}`, { timeout: 7500 });
+                    if (r.data?.userCape) {
+                        images = [r.data.userCape];
+                        downloadUrl = r.data.userCape;
+                        source = "Starlight";
+                    } else {
+                        return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:minecraft.no_cape')}` });
+                    }
+                } catch (err) {
+                    logger.debug(`[Minecraft] Starlight API failed for cape: ${err.message}`);
+                    return interaction.editReply({ content: `${e.pixel_cross} ${t('commands:minecraft.cape_fetch_error')}` });
+                }
+            } else {
+                const crafatarImg = getCrafatarUrl(type, p.uuid);
+                try {
+                    if (!crafatarImg) throw new Error("Invalid type for Crafatar");
+                    await axios.head(crafatarImg, { timeout: 1500 });
+                    images.push(crafatarImg);
+                } catch (err) {
+                    source = "Mineskin";
+                    const mineskinUrls = getMineskinUrls(type, p.uuid);
+                    if (mineskinUrls.length > 0) {
+                        images = mineskinUrls;
+                        downloadUrl = `https://mineskin.eu/download/${p.uuid}`;
+                        logger.debug(`[Minecraft] Crafatar unreachable, using Mineskin fallback for ${type}`);
+                    }
                 }
             }
 
@@ -293,3 +316,5 @@ module.exports = {
         created: 1765271948
     }
 };
+
+// contributors: @relentiousdragon

@@ -1,4 +1,4 @@
-const { PermissionsBitField, EmbedBuilder, MessageFlags } = require("discord.js");
+const { PermissionsBitField, EmbedBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const fs = require("fs");
 const { settings } = require("../util/settingsModule.js");
 const funcs = require("../util/functions.js");
@@ -55,6 +55,24 @@ module.exports = {
                 }
             }
 
+            if (process.env.CANARY === "true" && !settings.devs.includes(userId)) {
+                if (!settings.testers || !settings.testers.includes(userId)) {
+                    const row = new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setLabel(t('events:interaction.apply_tester'))
+                                .setStyle(ButtonStyle.Link)
+                                .setURL("https://forms.gle/3Ai58Yr3vsJKs2dQ9")
+                        );
+
+                    return interaction.reply({
+                        content: `${e.pixel_cross} ${t('events:interaction.canary_restricted')}`,
+                        components: [row],
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+            }
+
             if (settings.event === "maintenance" && !settings.devs.includes(interaction.user.id)) {
                 try {
                     return interaction.reply({ content: `${e.pixel_cross} ${t('events:interaction.maintenance')}`, flags: MessageFlags.Ephemeral });
@@ -78,7 +96,19 @@ module.exports = {
             // beta/tester commands
             if (command.beta && !settings.devs.includes(interaction.user.id)) {
                 if (!settings.testers || !settings.testers.includes(interaction.user.id)) {
-                    return interaction.reply({ content: `${e.pixel_cross} ${t('events:interaction.no_permission_command')}`, flags: MessageFlags.Ephemeral });
+                    const row = new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setLabel(t('events:interaction.apply_tester'))
+                                .setStyle(ButtonStyle.Link)
+                                .setURL("https://forms.gle/3Ai58Yr3vsJKs2dQ9")
+                        );
+
+                    return interaction.reply({
+                        content: `${e.pixel_cross} ${t('events:interaction.no_permission_command')}`,
+                        components: [row],
+                        flags: MessageFlags.Ephemeral
+                    });
                 }
             }
 
@@ -186,9 +216,9 @@ module.exports = {
         } else if (interaction.isModalSubmit()) {
             await interactionHandlers.handleModalInteraction(bot, interaction, settings, logger, t);
         }
+
+        users.updateOne({ userID: userId }, { $set: { lastActive: new Date(), locale: interaction.locale } }).catch(err => logger.debug("[INTERACTION] lastActive/locale update failed:", err));
     }
 };
 
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+// contributors: @relentiousdragon

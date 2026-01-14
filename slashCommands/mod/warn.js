@@ -3,9 +3,11 @@ const e = require("../../data/emoji.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const modLog = require("../../util/modLog.js");
 const Warns = require("../../schemas/warns.js");
+const Infractions = require("../../schemas/infractions.js");
 const { Server } = require("../../schemas/servers.js");
 const { parseEmoji } = require("../../util/functions.js");
 const crypto = require("crypto");
+const funcs = require("../../util/functions.js");
 
 function formatDuration(ms) {
     const seconds = Math.floor(ms / 1000);
@@ -44,7 +46,7 @@ module.exports = {
                 .setDescription('Reason for the warning')
                 .setDescriptionLocalizations(commandMeta.warn.option_reason_description || {})
                 .setRequired(true)
-                .setMaxLength(500)
+                .setMaxLength(350)
             )
         )
         .addSubcommand(sub => sub
@@ -308,6 +310,23 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
         timestamp: new Date()
     });
 
+    await Infractions.create({
+        serverID: interaction.guildId,
+        userID: user.id,
+        type: 'warn',
+        warnId: warnId,
+        reason: reason,
+        moderatorID: interaction.user.id
+    });
+
+    const infractions = await Infractions.find({ serverID: interaction.guildId, userID: user.id }).lean();
+    const risk = funcs.getRiskTier(infractions);
+    warnData.risk = {
+        score: risk.count,
+        tier: risk.name,
+        lastUpdated: new Date()
+    };
+
     await warnData.save();
 
     const warnCount = warnData.warns.length;
@@ -347,6 +366,13 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
                             duration: config.duration,
                             threshold: threshold
                         };
+                        await Infractions.create({
+                            serverID: interaction.guildId,
+                            userID: user.id,
+                            type: 'timeout',
+                            reason: `Threshold Action: Reached ${threshold} warnings`,
+                            moderatorID: interaction.user.id
+                        });
                     } catch (error) {
                         logger.error(`Failed to timeout user ${user.id}:`, error);
                     }
@@ -361,6 +387,13 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
                                 duration: 0,
                                 threshold: threshold
                             };
+                            await Infractions.create({
+                                serverID: interaction.guildId,
+                                userID: user.id,
+                                type: 'kick',
+                                reason: `Threshold Action: Reached ${threshold} warnings`,
+                                moderatorID: interaction.user.id
+                            });
                         }
                     } catch (error) {
                         logger.error(`Failed to kick user ${user.id}:`, error);
@@ -376,6 +409,13 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
                                 duration: 0,
                                 threshold: threshold
                             };
+                            await Infractions.create({
+                                serverID: interaction.guildId,
+                                userID: user.id,
+                                type: 'ban',
+                                reason: `Threshold Action: Reached ${threshold} warnings`,
+                                moderatorID: interaction.user.id
+                            });
                         }
                     } catch (error) {
                         logger.error(`Failed to ban user ${user.id}:`, error);
@@ -683,6 +723,21 @@ async function handleRemoveWarn(bot, interaction, t, logger, warnID2, userID2) {
 
     const removedWarn = warnData.warns[warnIndex];
     warnData.warns.splice(warnIndex, 1);
+
+    await Infractions.deleteOne({
+        serverID: interaction.guildId,
+        userID: userID,
+        warnId: warnId
+    });
+
+    const infractions = await Infractions.find({ serverID: interaction.guildId, userID: userID }).lean();
+    const risk = funcs.getRiskTier(infractions);
+    warnData.risk = {
+        score: risk.count,
+        tier: risk.name,
+        lastUpdated: new Date()
+    };
+
     await warnData.save();
 
     await modLog.logEvent(bot, interaction.guildId, 'memberWarnRemove', {
@@ -789,6 +844,22 @@ async function handleClearWarns(bot, interaction, t, logger) {
 
         if (i.customId === 'confirm_clear') {
             warnData.warns = [];
+
+            await Infractions.deleteMany({
+                serverID: interaction.guildId,
+                userID: user.id,
+                type: 'warn'
+            });
+
+            const infractions = await Infractions.find({ serverID: interaction.guildId, userID: user.id }).lean();
+            const risk = funcs.getRiskTier(infractions);
+
+            warnData.risk = {
+                score: risk.count,
+                tier: risk.name,
+                lastUpdated: new Date()
+            };
+
             await warnData.save();
 
             await modLog.logEvent(bot, interaction.guildId, 'memberWarnClear', {
@@ -1031,3 +1102,5 @@ async function handleConfigWarns(bot, interaction, t, logger) {
         flags: MessageFlags.IsComponentsV2
     });
 }
+
+// contributors: @relentiousdragon

@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, MessageFlags, ContainerBuilder, Secti
 const commandMeta = require('../../util/i18n.js').getCommandMetadata();
 const shardStats = require("../../schemas/shardStats.js");
 const e = require("../../data/emoji.js");
+const { parseEmoji } = require("../../util/functions.js");
 
 const formatUptime = (uptime) => {
     const seconds = Math.floor((uptime / 1000) % 60);
@@ -98,8 +99,16 @@ module.exports = {
                 new TextDisplayBuilder().setContent(`-# ${t('commands:botstats.footer', { version: settings.version, canary: isCanary ? ' CANARY' : '', emoji: Math.random() < 0.05 ? (Math.random() < 0.5 ? '🧱' : '🍝') : '💻' })}`)
             );
 
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('bot_credits')
+                .setLabel(t('commands:credits.title'))
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji(parseEmoji(e.blurple_star))
+        );
+
         return interaction.reply({
-            components: [container],
+            components: [container, row],
             flags: MessageFlags.IsComponentsV2
         });
     },
@@ -112,3 +121,5 @@ module.exports = {
         created: 1764938508
     }
 };
+
+// contributors: @relentiousdragon

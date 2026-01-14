@@ -81,9 +81,9 @@ module.exports = {
                         else emojiObj = funcs.parseEmoji(e.info);
 
                         return {
-                            label: t(`common.categories.${cat}`, { defaultValue: cat }),
+                            label: t(`common:categories.${cat}`, { defaultValue: cat }),
                             value: cat,
-                            description: t('commands:help.view_category', { category: t(`common.categories.${cat}`, { defaultValue: cat }) }),
+                            description: t('commands:help.view_category', { category: t(`common:categories.${cat}`, { defaultValue: cat }) }),
                             emoji: emojiObj
                         };
                     })
@@ -106,7 +106,11 @@ module.exports = {
             const topCommands = await analyticsWorker.getTopCommands();
             if (topCommands.length > 0) {
                 const topCmdString = topCommands.map((cmd, i) => {
-                    return `**/${cmd.name}** - ${funcs.abbr(cmd.count)}`;
+                    const fullCmd = bot.slashCommands.get(cmd.name);
+                    const betaBadge = (fullCmd && fullCmd.beta) ? ` ${e.badge_beta1}${e.badge_beta2}` : "";
+                    const isNew = (fullCmd && fullCmd.help && fullCmd.help.created) && (Math.floor(Date.now() / 1000) - fullCmd.help.created) < 25 * 24 * 60 * 60;
+                    const newBadge = isNew ? ` ${e.badge_new1}${e.badge_new2}` : "";
+                    return `**/${cmd.name}**${betaBadge}${newBadge} - ${funcs.abbr(cmd.count)}`;
                 }).join("\n");
 
                 section.addTextDisplayComponents(
@@ -151,3 +155,5 @@ module.exports = {
         created: 1764938508
     }
 };
+
+// contributors: @relentiousdragon

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { progressBar } = require("../../util/functions.js");
-const settings = require("../../util/settings.json");
+const { settings } = require("../../util/settingsModule.js");
 const e = require("../../data/emoji.js");
 //
 module.exports = {
@@ -27,6 +27,8 @@ module.exports = {
                 .setDescription("Style (optional)")
                 .setRequired(false)
         ),
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
     dev: false,
     beta: true,
     mod: false,
@@ -62,3 +64,5 @@ module.exports = {
         created: 1764938508
     }
 };
+
+// contributors: @relentiousdragon

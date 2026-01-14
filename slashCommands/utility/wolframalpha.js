@@ -307,3 +307,5 @@ async function handleWolframError(interaction, error, settings, t, originalQuery
         flags: MessageFlags.IsComponentsV2
     });
 }
+
+// contributors: @relentiousdragon

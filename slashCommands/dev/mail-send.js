@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, MessageFlags } = require("discord.js");
 const users = require("../../schemas/users.js");
 const globalMails = require("../../schemas/global_mails.js");
-const settings = require('../../util/settings.json');
+const { settings } = require("../../util/settingsModule.js");
 const ms = require("ms");
 const e = require("../../data/emoji.js");
 const logger = require("../../logger.js");
@@ -61,6 +61,8 @@ module.exports = {
             option.setName('active')
                 .setDescription('Active duration (e.g., 1d, 2h) for filtering recipients (ONLY FOR INDIVIDUAL MAILS)')
                 .setRequired(false)),
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
     dev: true,
     explicit: process.env.CANARY === "true" ? false : true,
     async execute(bot, interaction, funcs) {
@@ -140,3 +142,5 @@ module.exports = {
         created: 1764938508
     }
 };
+
+// contributors: @relentiousdragon

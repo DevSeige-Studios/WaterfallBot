@@ -14,3 +14,6 @@ const analyticsSchema = new mongoose.Schema({
 analyticsSchema.index({ timestamp: 1 }, { expireAfterSeconds: 2592000 });
 
 module.exports = mongoose.model("Analytics", analyticsSchema);
+
+
+// contributors: @relentiousdragon

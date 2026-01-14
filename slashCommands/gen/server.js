@@ -84,14 +84,14 @@ module.exports = {
                     const stats = await ServerStats.findOne({ guildId: guild.id });
                     if (stats) {
                         const totalMessages = stats.totalMessages || stats.messageStats?.reduce((sum, s) => sum + s.count, 0) || 0;
-                        const totalVoice = stats.vcSessions?.reduce((sum, s) => sum + s.duration, 0) || 0;
+                        const totalVoice = (stats?.allTimeVoiceMinutes || 0) * 60;
                         const totalInvites = stats.memberJoins?.length || 0;
 
                         description += `### ${t('commands:serverstats.activity_title') || 'Server Activity'}\n`;
                         description += `${e.chart} ${t('commands:serverstats.total_messages_ever')}: **${funcs.abbr(totalMessages)}**\n`;
                         if (totalVoice > 0) {
                             const hours = Math.floor(totalVoice / 3600);
-                            description += `${e.voice_channnel} ${t('commands:serverstats.voice_time')} (30d): **${hours}h**\n`;
+                            description += `${e.voice_channnel} ${t('commands:serverstats.all_time_voice')}: **${hours.toLocaleString()}h**\n`;
                         }
                         if (totalInvites > 0 && interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) description += `${e.invite} ${t('commands:serverstats.invites')}: **${totalInvites}**\n`;
                         description += '\n';
@@ -156,3 +156,5 @@ module.exports = {
         created: 1766228122
     }
 };
+
+// contributors: @relentiousdragon
