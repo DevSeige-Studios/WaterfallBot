@@ -19,7 +19,15 @@ const userSchema = mongoose.Schema({
         "stored_bars": [String],
         "color": { type: String, default: null },
         "divider": { type: String, default: null },
+        notifications: {
+            vote: { type: String, default: "OFF" }, // OFF, DM, INTERACTION
+            voteThanks: { type: String, default: "DM" }, // OFF, DM
+            voteNotice: { type: Boolean, default: false },
+            voteNotice: { type: Boolean, default: false }
+        }
     },
+    voteReminderSent: { type: Boolean, default: true },
+    locale: { type: String, default: 'en' },
     geminiImageUsage: {
         date: { type: String, default: null },
         count: { type: Number, default: 0 }
@@ -30,3 +38,6 @@ const userSchema = mongoose.Schema({
 userSchema.index({ banned: 1 });
 
 module.exports = mongoose.model("users", userSchema);
+
+
+// contributors: @relentiousdragon
