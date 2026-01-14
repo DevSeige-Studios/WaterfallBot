@@ -31,7 +31,7 @@ module.exports = {
     contexts: [0],
     dev: false,
     mod: false,
-    beta: true,
+    beta: false,
     explicit: false,
     async execute(bot, interaction, funcs, settings, logger, t) {
         const profile = interaction.options.getString("profile");
