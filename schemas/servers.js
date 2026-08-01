@@ -4,7 +4,7 @@ const serverSchema = mongoose.Schema({
     serverID: { type: String, index: true },
     prefix: String,
     language: { type: String, default: "en" },
-    botProfile: { type: String, default: "default" },
+    botProfile: { type: String, default: "azure" },
     botProfileLastUpdate: { type: Number, default: 0 },
     lastWelcomeMessage: { type: Number, default: 0 },
     serverStatsOverviewLastUpdate: { type: Number, default: 0 },

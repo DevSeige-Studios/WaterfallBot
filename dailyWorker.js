@@ -35,7 +35,7 @@ module.exports = {
         }
 
         try {
-            const statsEnabledServers = await Server.find({ "serverStats.enabled": true }).select("serverID language").maxTimeMS(20000);
+            const statsEnabledServers = await Server.find({ "serverStats.enabled": true }).select("serverID language").maxTimeMS(20000).lean();
 
             for (const server of statsEnabledServers) {
                 const guildId = server.serverID;
@@ -44,7 +44,7 @@ module.exports = {
                 try {
                     await ServerStats.cleanupOldData(guildId);
 
-                    const stats = await ServerStats.findOne({ guildId });
+                    const stats = await ServerStats.findOne({ guildId }).lean();
                     if (stats) {
                         const yesterday = moment.utc().subtract(1, 'day').startOf('day').toDate();
                         const nextDay = moment.utc().subtract(1, 'day').endOf('day').toDate();
@@ -81,12 +81,12 @@ module.exports = {
                             }
                         );
 
-                        stats.dailySnapshots = stats.dailySnapshots || [];
-                        const dayIndex = stats.dailySnapshots.findIndex(s => moment.utc(s.date).isSame(moment.utc(yesterday), 'day'));
+                        const dailySnapshots = stats.dailySnapshots || [];
+                        const dayIndex = dailySnapshots.findIndex(s => moment.utc(s.date).isSame(moment.utc(yesterday), 'day'));
                         if (dayIndex >= 0) {
-                            stats.dailySnapshots[dayIndex] = newSnap;
+                            dailySnapshots[dayIndex] = newSnap;
                         } else {
-                            stats.dailySnapshots.push(newSnap);
+                            dailySnapshots.push(newSnap);
                         }
 
                         if (stats.exportConfig?.enabled && stats.exportConfig?.channelId) {
@@ -96,111 +96,125 @@ module.exports = {
                             if (daysSinceExport >= 30) {
                                 const exportChannel = bot.channels.cache.get(stats.exportConfig.channelId);
                                 if (exportChannel) {
-                                    const csvRows = ["Date,Messages,Voice (Minutes),New Members"];
+                                    try {
+                                        const csvRows = ["Date,Messages,Voice (Minutes),New Members"];
 
-                                    for (let i = 29; i >= 0; i--) {
-                                        const date = moment.utc().subtract(i, 'days');
-                                        const startOfDay = date.clone().startOf('day');
-                                        const endOfDay = date.clone().endOf('day');
-                                        const dateStr = date.format('YYYY-MM-DD');
+                                        for (let i = 29; i >= 0; i--) {
+                                            const date = moment.utc().subtract(i, 'days');
+                                            const startOfDay = date.clone().startOf('day');
+                                            const endOfDay = date.clone().endOf('day');
+                                            const dateStr = date.format('YYYY-MM-DD');
 
-                                        const snapshot = stats.dailySnapshots.find(s =>
-                                            moment.utc(s.date).isSame(date, 'day')
+                                            const snapshot = dailySnapshots.find(s =>
+                                                moment.utc(s.date).isSame(date, 'day')
+                                            );
+
+                                            if (snapshot) {
+                                                csvRows.push(`${dateStr},${snapshot.messages},${snapshot.voiceMinutes},${snapshot.memberCount || 0}`);
+                                            } else {
+                                                const dailyMessages = (stats.messageStats || [])
+                                                    .filter(s => s.date >= startOfDay.toDate() && s.date <= endOfDay.toDate())
+                                                    .reduce((sum, s) => sum + s.count, 0);
+
+                                                const dailyVoice = (stats.vcSessions || [])
+                                                    .filter(s => s.leaveTime >= startOfDay.toDate() && s.leaveTime <= endOfDay.toDate())
+                                                    .reduce((sum, s) => sum + s.duration, 0);
+
+                                                csvRows.push(`${dateStr},${dailyMessages},${Math.floor(dailyVoice / 60)},0`);
+                                            }
+                                        }
+
+                                        const csvBuffer = Buffer.from(csvRows.join('\n'), 'utf-8');
+                                        const csvAttachment = new AttachmentBuilder(csvBuffer, { name: `stats_export_${guildId}_${moment.utc().format('YYYY-MM-DD')}.csv` });
+
+                                        const graphRenderer = require("./util/statsGraphRenderer.js");
+                                        const { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags } = require('discord.js');
+                                        const funcs = require("./util/functions.js");
+
+                                        const dailyData = [];
+                                        const labels = [];
+                                        for (let i = 29; i >= 0; i--) {
+                                            const date = moment.utc().subtract(i, 'days');
+                                            const snap = dailySnapshots.find(s => moment.utc(s.date).isSame(date, 'day'));
+                                            dailyData.push(snap?.messages || 0);
+                                            labels.push(date.format('MM/DD'));
+                                        }
+
+                                        const totalMessages = dailyData.reduce((a, b) => a + b, 0);
+                                        const totalVoice = (stats.vcSessions || []).reduce((sum, s) => sum + (s.duration || 0), 0);
+
+                                        const graphBuffer = await graphRenderer.renderLineChart({
+                                            data: dailyData,
+                                            labels: labels,
+                                            title: t('commands:serverstats.overview_graph_title', { days: 30 }),
+                                            width: 600,
+                                            height: 300
+                                        });
+
+                                        const cardBuffer = await graphRenderer.renderStatsCard({
+                                            stats: [
+                                                { label: t('commands:serverstats.total_messages', { days: 30 }), value: funcs.abbr(totalMessages), color: graphRenderer.COLORS.accent },
+                                                { label: t('commands:serverstats.voice_time'), value: funcs.formatDurationPretty(totalVoice * 1000), color: graphRenderer.COLORS.success },
+                                                { label: t('commands:serverstats.members'), value: funcs.abbr(memberCount || 0) }
+                                            ],
+                                            title: t('commands:serverstats.export_summary_title'),
+                                            width: 600,
+                                            height: 220
+                                        });
+
+                                        const graphAttachName = `graph_${Date.now()}.gif`;
+                                        const cardAttachName = `card_${Date.now()}.png`;
+
+                                        const container = new ContainerBuilder()
+                                            .setAccentColor(0x5865F2)
+                                            .addTextDisplayComponents(
+                                                new TextDisplayBuilder().setContent(`# ${t('commands:serverstats.export_title_auto')}`),
+                                                new TextDisplayBuilder().setContent(`-# ${guild?.name || guildId} • ${t('commands:serverstats.last_30_days')}`)
+                                            )
+                                            .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+                                            .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${graphAttachName}`)))
+                                            .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${cardAttachName}`)))
+                                            .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+                                            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${t('commands:serverstats.export_contents')}`));
+
+                                        await exportChannel.send({
+                                            components: [container],
+                                            files: [
+                                                new AttachmentBuilder(graphBuffer, { name: graphAttachName }),
+                                                new AttachmentBuilder(cardBuffer, { name: cardAttachName })
+                                            ],
+                                            flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications
+                                        });
+
+                                        await exportChannel.send({
+                                            content: `${t('commands:serverstats.export_message_content')}\n-# ${moment.utc().locale(server.language || 'en').format('MMMM D, YYYY')}`,
+                                            files: [csvAttachment],
+                                            flags: MessageFlags.SuppressNotifications
+                                        });
+
+                                        await ServerStats.updateOne(
+                                            { guildId },
+                                            { $set: { 'exportConfig.lastExportAt': moment.utc().toDate() } }
                                         );
-
-                                        if (snapshot) {
-                                            csvRows.push(`${dateStr},${snapshot.messages},${snapshot.voiceMinutes},${snapshot.memberCount || 0}`);
+                                        logger.debug(`[DailyWorker] Sent auto-export for guild ${guildId}`);
+                                    } catch (sendErr) {
+                                        const code = sendErr.code;
+                                        if (code === 10003 || code === 50013 || code === 50001) {
+                                            logger.warn(`[DailyWorker] Export channel ${stats.exportConfig.channelId} in guild ${guildId} returned error ${code}. Disabling auto-export.`);
+                                            await ServerStats.updateOne(
+                                                { guildId },
+                                                { $set: { 'exportConfig.enabled': false } }
+                                            );
                                         } else {
-                                            const dailyMessages = stats.messageStats
-                                                .filter(s => s.date >= startOfDay.toDate() && s.date <= endOfDay.toDate())
-                                                .reduce((sum, s) => sum + s.count, 0);
-
-                                            const dailyVoice = stats.vcSessions
-                                                .filter(s => s.leaveTime >= startOfDay.toDate() && s.leaveTime <= endOfDay.toDate())
-                                                .reduce((sum, s) => sum + s.duration, 0);
-
-                                            csvRows.push(`${dateStr},${dailyMessages},${Math.floor(dailyVoice / 60)},0`);
+                                            logger.error(`[DailyWorker] Failed sending auto-export for guild ${guildId}:`, sendErr);
                                         }
                                     }
-
-                                    const csvBuffer = Buffer.from(csvRows.join('\n'), 'utf-8');
-                                    const csvAttachment = new AttachmentBuilder(csvBuffer, { name: `stats_export_${guildId}_${moment.utc().format('YYYY-MM-DD')}.csv` });
-
-                                    const graphRenderer = require("./util/statsGraphRenderer.js");
-                                    const { ContainerBuilder, SectionBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags } = require('discord.js');
-                                    const funcs = require("./util/functions.js");
-
-                                    const dailyData = [];
-                                    const labels = [];
-                                    for (let i = 29; i >= 0; i--) {
-                                        const date = moment.utc().subtract(i, 'days');
-                                        const snap = stats.dailySnapshots?.find(s => moment.utc(s.date).isSame(date, 'day'));
-                                        dailyData.push(snap?.messages || 0);
-                                        labels.push(date.format('MM/DD'));
-                                    }
-
-                                    const totalMessages = dailyData.reduce((a, b) => a + b, 0);
-                                    const totalVoice = (stats.vcSessions || []).reduce((sum, s) => sum + (s.duration || 0), 0);
-
-                                    const graphBuffer = await graphRenderer.renderLineChart({
-                                        data: dailyData,
-                                        labels: labels,
-                                        title: t('commands:serverstats.overview_graph_title', { days: 30 }),
-                                        width: 600,
-                                        height: 300
-                                    });
-
-                                    const cardBuffer = await graphRenderer.renderStatsCard({
-                                        stats: [
-                                            { label: t('commands:serverstats.total_messages', { days: 30 }), value: funcs.abbr(totalMessages), color: graphRenderer.COLORS.accent },
-                                            { label: t('commands:serverstats.voice_time'), value: funcs.formatDurationPretty(totalVoice * 1000), color: graphRenderer.COLORS.success },
-                                            { label: t('commands:serverstats.members'), value: funcs.abbr(memberCount || 0) }
-                                        ],
-                                        title: t('commands:serverstats.export_summary_title'),
-                                        width: 600,
-                                        height: 220
-                                    });
-
-                                    const graphAttachName = `graph_${Date.now()}.gif`;
-                                    const cardAttachName = `card_${Date.now()}.png`;
-
-                                    const container = new ContainerBuilder()
-                                        .setAccentColor(0x5865F2)
-                                        .addSectionComponents(
-                                            new SectionBuilder()
-                                                .addTextDisplayComponents(
-                                                    new TextDisplayBuilder().setContent(`# ${t('commands:serverstats.export_title_auto')}`),
-                                                    new TextDisplayBuilder().setContent(`-# ${guild?.name || guildId} • ${t('commands:serverstats.last_30_days')}`)
-                                                )
-                                        )
-                                        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
-                                        .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${graphAttachName}`)))
-                                        .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${cardAttachName}`)))
-                                        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
-                                        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${t('commands:serverstats.export_contents')}`));
-
-                                    await exportChannel.send({
-                                        components: [container],
-                                        files: [
-                                            new AttachmentBuilder(graphBuffer, { name: graphAttachName }),
-                                            new AttachmentBuilder(cardBuffer, { name: cardAttachName })
-                                        ],
-                                        flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications
-                                    });
-
-                                    await exportChannel.send({
-                                        content: `${t('commands:serverstats.export_message_content')}\n-# ${moment.utc().locale(server.language || 'en').format('MMMM D, YYYY')}`,
-                                        files: [csvAttachment],
-                                        flags: MessageFlags.SuppressNotifications
-                                    });
-
+                                } else {
+                                    logger.warn(`[DailyWorker] Export channel ${stats.exportConfig.channelId} not found for guild ${guildId}. Disabling auto-export.`);
                                     await ServerStats.updateOne(
                                         { guildId },
-                                        { $set: { 'exportConfig.lastExportAt': moment.utc().toDate() } }
+                                        { $set: { 'exportConfig.enabled': false } }
                                     );
-                                    logger.debug(`[DailyWorker] Sent auto-export for guild ${guildId}`);
-                                } else {
-                                    logger.warn(`[DailyWorker] Export channel ${stats.exportConfig.channelId} not found for guild ${guildId}, skipping this cycle.`);
                                 }
                             }
                         }

@@ -200,17 +200,17 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
             let modelsPriority = [];
             if (wantsImage) {
                 modelsPriority = [
-                    "gemini-2.5-flash-image",
-                    "gemini-2.5-flash",
+                    "gemini-2.0-flash-exp",
+                    "gemini-2.5-flash-preview-05-20",
                     "gemini-2.5-flash-lite",
                     "gemini-2.0-flash"
                 ];
             } else {
                 modelsPriority = [
-                    "gemini-2.5-pro",
-                    "gemini-2.5-flash",
                     "gemini-2.5-flash-lite",
-                    "gemini-2.0-flash"
+                    "gemini-2.5-flash",
+                    "gemini-2.0-flash",
+                    "gemini-2.5-pro"
                 ];
             }
 
@@ -225,14 +225,14 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                     if (err.type === "RATE_LIMIT") {
                         logger.warn(`Quota hit for ${model}, falling back...`);
                         continue;
-                    } else if (err.error.status === 400) {
+                    } else if (err.type === "FATAL" && err.error?.response?.status === 400) {
                         wantsImage = false;
                         continue;
-                    } else if (err.error.status === 503) {
+                    } else if (err.type === "FATAL" && err.error?.response?.status === 503) {
                         logger.warn(`${model} Model overloaded, falling back...`);
                         continue;
                     } else {
-                        throw err.error;
+                        throw err.error || err;
                     }
                 }
             }

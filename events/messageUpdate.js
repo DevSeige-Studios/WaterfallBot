@@ -19,6 +19,9 @@ module.exports = {
 
             if (!contentChanged && !embedsChanged && !componentsChanged && !isComponentsV2) return;
 
+            const contentIdentical = oldMessage.content === newMessage.content;
+            if (contentIdentical && !isComponentsV2) return;
+
             if (!oldMessage.content && (!oldMessage.embeds || oldMessage.embeds.length === 0) &&
                 (!oldMessage.components || oldMessage.components.length === 0) && !isComponentsV2) return;
 

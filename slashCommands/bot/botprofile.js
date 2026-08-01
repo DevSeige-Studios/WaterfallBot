@@ -208,7 +208,7 @@ module.exports = {
         };
 
         const profileNames = {
-            classic: "classic",
+            classic: "Classic",
             crimson: "Crimson",
             azure: "Azure",
             amethyst: "Amethyst",

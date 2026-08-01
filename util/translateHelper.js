@@ -61,6 +61,10 @@ const NL_PLACEHOLDER = '\x00NL\x00';
 
 const TRANSLATION_CACHE_SIZE = 500;
 const translationCache = new Map();
+const GOOGLE_DETECT_MIN_INTERVAL = 500;
+let googleDetectLastCall = 0;
+const DETECT_CACHE_SIZE = 200;
+const detectCache = new Map();
 //
 function cacheGet(key) {
     if (!translationCache.has(key)) return undefined;
@@ -109,6 +113,98 @@ const apiLimiter = new ConcurrencyLimiter(5);
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+//
+function getDetectCache(text) {
+    const key = text.slice(0, 250);
+    if (!detectCache.has(key)) return undefined;
+    const v = detectCache.get(key);
+    detectCache.delete(key);
+    detectCache.set(key, v);
+    return v;
+}
+function setDetectCache(text, lang) {
+    const key = text.slice(0, 250);
+    if (detectCache.size >= DETECT_CACHE_SIZE) {
+        detectCache.delete(detectCache.keys().next().value);
+    }
+    detectCache.set(key, lang);
+}
+
+function normalizeLangCode(code) {
+    if (!code) return null;
+    const lower = String(code).toLowerCase().trim();
+    if (lower === 'zh-cn' || lower === 'zh-hans' || lower === 'zh') return 'zh-CN';
+    if (lower === 'zh-tw' || lower === 'zh-hant') return 'zh-TW';
+    if (VALID_LANG_CODES.has(lower)) return lower;
+    const baseCode = lower.split('-')[0];
+    if (VALID_LANG_CODES.has(baseCode)) return baseCode;
+    return null;
+}
+
+async function detectLanguageGoogle(text) {
+    if (!text || !text.trim()) return null;
+    const snippet = text.slice(0, 250);
+    const cached = getDetectCache(snippet);
+    if (cached !== undefined) return cached;
+
+    const now = Date.now();
+    const sinceLastCall = now - googleDetectLastCall;
+    if (sinceLastCall < GOOGLE_DETECT_MIN_INTERVAL) {
+        await sleep(GOOGLE_DETECT_MIN_INTERVAL - sinceLastCall);
+    }
+    googleDetectLastCall = Date.now();
+
+    try {
+        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=' + encodeURIComponent(snippet);
+        const res = await axios.get(url, { timeout: 4000 });
+        const raw = res.data && res.data[2];
+        const lang = normalizeLangCode(raw);
+        if (lang) {
+            setDetectCache(snippet, lang);
+        }
+        return lang;
+    } catch (err) {
+        logger.debug('[Translate] Google detect failed:', err.message);
+        return null;
+    }
+}
+
+async function detectLanguageMyMemory(text) {
+    if (!text || !text.trim()) return null;
+    try {
+        const snippet = text.slice(0, 250);
+        const data = await fetchTranslationWithRetry(snippet, `autodetect|en`);
+        const raw = data.responseData?.detectedLanguage;
+        return normalizeLangCode(raw);
+    } catch (err) {
+        logger.debug('[Translate] MyMemory detect failed:', err.message);
+        return null;
+    }
+}
+
+async function detectLanguageWithFallback(text) {
+    if (!text || !text.trim()) return 'en';
+
+    const localResult = detectLanguage(text, true);
+
+    const googleLang = await detectLanguageGoogle(text);
+    if (googleLang && googleLang !== 'en') {
+        return googleLang;
+    }
+    if (googleLang === 'en' && localResult.lang !== 'en' && localResult.score >= 2) {
+        return localResult.lang;
+    }
+    if (googleLang) {
+        return googleLang;
+    }
+
+    if (localResult.lang === 'en' && localResult.score === 0) {
+        const mmLang = await detectLanguageMyMemory(text);
+        if (mmLang) return mmLang;
+    }
+
+    return localResult.lang;
 }
 
 async function fetchTranslationWithRetry(chunkCore, langPair, maxRetries = 2) {
@@ -199,10 +295,10 @@ function shouldTranslateLinkText(linkText) {
 
 function restorePlaceholderSpacing(original, translated) {
     if (!original || !translated) return translated;
-    
+
     const tagRegex = /<\/?\s*[a-z]\d+\s*\/?>/gi;
     let result = translated;
-    
+
     result = result.replace(tagRegex, (match, offset, fullStr) => {
         const cleanMatch = match.replace(/\s+/g, '').toLowerCase();
         let origIdx = original.toLowerCase().indexOf(cleanMatch);
@@ -213,7 +309,7 @@ function restorePlaceholderSpacing(original, translated) {
                 origIdx = original.toLowerCase().indexOf(cleanMatch.replace('>', '/>'));
             }
         }
-        
+
         const isClosing = match.startsWith('</');
         const isSelfClosing = match.endsWith('/>');
         const isOpening = !isClosing && !isSelfClosing;
@@ -235,10 +331,10 @@ function restorePlaceholderSpacing(original, translated) {
 
             const origHasLeadingWs = origIdx > 0 && /\s/.test(original[origIdx - 1]);
             const origHasTrailingWs = (origIdx + origLength) < original.length && /\s/.test(original[origIdx + origLength]);
-            
+
             const transHasLeadingWs = offset > 0 && /\s/.test(fullStr[offset - 1]);
             const transHasTrailingWs = (offset + match.length) < fullStr.length && /\s/.test(fullStr[offset + match.length]);
-            
+
             if (origHasLeadingWs && !transHasLeadingWs) {
                 const origCharBefore = original[origIdx - 1];
                 prefix = origCharBefore === '\n' ? '\n' : ' ';
@@ -260,10 +356,10 @@ function restorePlaceholderSpacing(original, translated) {
                 suffix = ' ';
             }
         }
-        
+
         return prefix + match + suffix;
     });
-    
+
     return result;
 }
 
@@ -366,9 +462,9 @@ function detectLanguage(text, returnDetailed = false) {
     let cyrillic = 0, greek = 0, korean = 0;
     for (const ch of sample) {
         const cp = ch.codePointAt(0);
-        if (cp >= 0x3040 && cp <= 0x30FF) cjk++; 
-        else if (cp >= 0x4E00 && cp <= 0x9FFF) cjk++; 
-        else if (cp >= 0xAC00 && cp <= 0xD7AF) korean++; 
+        if (cp >= 0x3040 && cp <= 0x30FF) cjk++;
+        else if (cp >= 0x4E00 && cp <= 0x9FFF) cjk++;
+        else if (cp >= 0xAC00 && cp <= 0xD7AF) korean++;
         else if (cp >= 0x0600 && cp <= 0x06FF) arabic++;
         else if (cp >= 0x0590 && cp <= 0x05FF) hebrew++;
         else if (cp >= 0x0E00 && cp <= 0x0E7F) thai++;
@@ -426,7 +522,7 @@ function detectLanguage(text, returnDetailed = false) {
 
     const wordCount = sample.trim().split(/\s+/).length;
     const minScore = wordCount <= 5 ? 1 : 2;
-    
+
     let resultLang = bestLang;
     let finalScore = bestScore;
     if (bestScore < minScore) {
@@ -444,26 +540,26 @@ function detectLanguage(text, returnDetailed = false) {
 function isEmojiCodePoint(cp) {
     if (!cp) return false;
     return (
-        (cp >= 0x1F300 && cp <= 0x1F9FF) ||  
-        (cp >= 0x1FA00 && cp <= 0x1FBFF) ||  
-        (cp >= 0x1F000 && cp <= 0x1F0FF) || 
-        (cp >= 0x1F100 && cp <= 0x1F2FF) || 
+        (cp >= 0x1F300 && cp <= 0x1F9FF) ||
+        (cp >= 0x1FA00 && cp <= 0x1FBFF) ||
+        (cp >= 0x1F000 && cp <= 0x1F0FF) ||
+        (cp >= 0x1F100 && cp <= 0x1F2FF) ||
         (cp >= 0x2600 && cp <= 0x27BF) ||
         (cp >= 0x2300 && cp <= 0x23FF) ||
         (cp >= 0x2B00 && cp <= 0x2BFF) ||
-        (cp >= 0x2934 && cp <= 0x2935) || 
-        (cp >= 0x25AA && cp <= 0x25FE) || 
-        (cp >= 0x3030 && cp <= 0x303D) ||    
-        (cp >= 0x3297 && cp <= 0x3299) ||    
-        (cp >= 0x1F600 && cp <= 0x1F64F) ||  
-        (cp >= 0x1F680 && cp <= 0x1F6FF) ||  
-        (cp >= 0x1F1E0 && cp <= 0x1F1FF) || 
-        cp === 0x2139 ||   
-        cp === 0x2328 ||   
-        cp === 0x23CF ||  
-        cp === 0x24C2 ||   
-        cp === 0x200D ||   
-        (cp >= 0xFE00 && cp <= 0xFE0F)  
+        (cp >= 0x2934 && cp <= 0x2935) ||
+        (cp >= 0x25AA && cp <= 0x25FE) ||
+        (cp >= 0x3030 && cp <= 0x303D) ||
+        (cp >= 0x3297 && cp <= 0x3299) ||
+        (cp >= 0x1F600 && cp <= 0x1F64F) ||
+        (cp >= 0x1F680 && cp <= 0x1F6FF) ||
+        (cp >= 0x1F1E0 && cp <= 0x1F1FF) ||
+        cp === 0x2139 ||
+        cp === 0x2328 ||
+        cp === 0x23CF ||
+        cp === 0x24C2 ||
+        cp === 0x200D ||
+        (cp >= 0xFE00 && cp <= 0xFE0F)
     );
 }
 
@@ -788,7 +884,7 @@ function parseFormattingSegments(text) {
             }
         }
 
-        for (let j = searchFrom; j < Math.min(text.length, i + 500); ) {
+        for (let j = searchFrom; j < Math.min(text.length, i + 500);) {
             const emojiCp = text.codePointAt(j);
             if (emojiCp && isEmojiCodePoint(emojiCp)) {
                 if (j < nextPos) nextPos = j;
@@ -874,19 +970,26 @@ function chunkText(text, maxLen = 450) {
 async function translateText(text, sourceLang, targetLang) {
     if (!text || !text.trim()) return { translated: text || '', detectedSource: sourceLang || 'auto' };
 
-    let resolvedSource = 'auto';
-    let localScore = 0;
+    let resolvedSource;
+    let detectedSource;
+
     if (!sourceLang || sourceLang === 'auto') {
-        const detail = detectLanguage(text, true);
-        resolvedSource = detail.lang;
-        localScore = detail.score;
+        resolvedSource = await detectLanguageWithFallback(text);
+        detectedSource = resolvedSource;
     } else {
         resolvedSource = sourceLang;
-        localScore = 100; 
+        detectedSource = sourceLang;
     }
-    let detectedSource = resolvedSource;
 
-    const useApiAutodetect = (resolvedSource === 'en' && localScore === 0 && (!sourceLang || sourceLang === 'auto'));
+    if (!resolvedSource || resolvedSource === 'en') {
+        const localCheck = detectLanguage(text, true);
+        if (localCheck.lang !== 'en' && localCheck.score >= 1) {
+            resolvedSource = localCheck.lang;
+            detectedSource = resolvedSource;
+        }
+    }
+
+    const useApiAutodetect = resolvedSource === 'en' && (!sourceLang || sourceLang === 'auto');
     if (useApiAutodetect) {
         resolvedSource = 'autodetect';
     }
@@ -900,18 +1003,18 @@ async function translateText(text, sourceLang, targetLang) {
     const lines = normalizedText.split('\n');
     const processedLines = [];
     const translationPromises = [];
-    
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        
+
         const { strippedText, linePrefixes } = extractLinePrefixes(line);
         const prefix = linePrefixes[0] || '';
-        
+
         if (!hasTranslatableContent(strippedText)) {
             processedLines.push({ type: 'static', content: line });
             continue;
         }
-        
+
         let addedPeriod = false;
         let lineToTranslate = strippedText;
         const trimmed = strippedText.trim();
@@ -920,14 +1023,14 @@ async function translateText(text, sourceLang, targetLang) {
             lineToTranslate = strippedText + ".";
             addedPeriod = true;
         }
-        
+
         const { segments, texts } = parseFormattingSegments(lineToTranslate);
-        
+
         if (texts.length === 0 || texts.every(t => !t.trim())) {
             processedLines.push({ type: 'static', content: line });
             continue;
         }
-        
+
         let placeholderStr = '';
         const literalsTable = [];
         const wrappedTable = [];
@@ -940,7 +1043,7 @@ async function translateText(text, sourceLang, targetLang) {
             } else if (seg.type === 'wrapped') {
                 const idx = wrappedTable.length;
                 wrappedTable.push({ prefix: seg.prefix, suffix: seg.suffix });
-                
+
                 let typeChar = 'w';
                 if (seg.prefix === '**') typeChar = 'b';
                 else if (seg.prefix === '*') typeChar = 'i';
@@ -955,30 +1058,30 @@ async function translateText(text, sourceLang, targetLang) {
                 placeholderStr += texts[seg.textIdx];
             }
         }
-        
+
         const promiseIdx = translationPromises.length;
         translationPromises.push((async () => {
-            const { translatedTexts, quality, reference, detectedSource: apiDetectedSource } = 
+            const { translatedTexts, quality, reference, detectedSource: apiDetectedSource } =
                 await batchTranslateSimpleTexts([placeholderStr], resolvedSource, targetLang);
-            
+
             let translated = translatedTexts[0] || placeholderStr;
-            
+
             translated = translated.replace(/<\s*([biuspclw])(\d+)\s*>\s+/gi, (match, char, idx) => {
                 return ' <' + char.toLowerCase() + idx + '>';
             });
             translated = translated.replace(/\s+<\s*\/\s*([biuspclw])(\d+)\s*>/gi, (match, char, idx) => {
                 return '</' + char.toLowerCase() + idx + '> ';
             });
-            
+
             translated = translated.replace(/<\s*([biuspclw])(\d+)\s*>/gi, '<$1$2>');
             translated = translated.replace(/<\s*\/\s*([biuspclw])(\d+)\s*>/gi, '</$1$2>');
             translated = translated.replace(/<\s*r(\d+)\s*\/*\s*>/gi, '<r$1/>');
-            
+
             translated = restorePlaceholderSpacing(placeholderStr, translated);
-            
+
             translated = translated.replace(/([a-zA-Z0-9])(<\s*[biuspclw]\d+\s*>)/gi, '$1 $2');
             translated = translated.replace(/(<\s*\/\s*[biuspclw]\d+\s*>)([a-zA-Z0-9])/gi, '$1 $2');
-            
+
             translated = postProcessTranslation(translated);
 
             translated = translated.replace(/<\s*([biuspclw])(\d+)\s*>/gi, (match, char, idx) => {
@@ -999,11 +1102,11 @@ async function translateText(text, sourceLang, targetLang) {
                 const val = literalsTable[Number(idx)];
                 return val !== undefined ? val : match;
             });
-            
+
             if (addedPeriod) {
                 translated = translated.replace(/\.\s*$/, '');
             }
-            
+
             return {
                 translated: prefix + translated,
                 quality,
@@ -1011,17 +1114,17 @@ async function translateText(text, sourceLang, targetLang) {
                 apiDetectedSource
             };
         })());
-        
+
         processedLines.push({ type: 'translated', promiseIdx });
     }
-    
+
     const results = await Promise.all(translationPromises);
-    
+
     const finalLines = [];
     let totalQuality = 0;
     let qualityCount = 0;
     let firstReference = null;
-    
+
     for (const lineObj of processedLines) {
         if (lineObj.type === 'static') {
             finalLines.push(lineObj.content);
@@ -1040,10 +1143,10 @@ async function translateText(text, sourceLang, targetLang) {
             }
         }
     }
-    
+
     const finalResult = finalLines.join('\n');
     const quality = qualityCount > 0 ? Math.round(totalQuality / qualityCount) : null;
-    
+
     return { translated: finalResult, detectedSource, quality, reference: firstReference };
 }
 
@@ -1136,7 +1239,7 @@ async function batchTranslateSimpleTexts(texts, sourceLang, targetLang) {
         } catch (err) {
             const errMsg = `[Translate] Failed to translate text segment [${ti}]: ${err.message}`;
             logger.error(errMsg);
-            translatedTexts.push(text); 
+            translatedTexts.push(text);
         }
     }
 
@@ -1213,7 +1316,7 @@ async function translateEmbed(embed, sourceLang, targetLang) {
 
     const translated = await batchTranslateEntries(entries, sourceLang, targetLang);
 
-    const newEmbed = JSON.parse(JSON.stringify(embed)); 
+    const newEmbed = JSON.parse(JSON.stringify(embed));
 
     for (const [path, text] of translated) {
         setNested(newEmbed, path, text);
@@ -1301,6 +1404,7 @@ module.exports = {
     getLanguageName,
     discordLocaleToLang,
     detectLanguage,
+    detectLanguageWithFallback,
     translateText,
     collectEmbedText,
     setNested,
@@ -1313,5 +1417,4 @@ module.exports = {
     postProcessTranslation,
     hasTranslatableContent,
 };
-
 // contributors: @relentiousdragon

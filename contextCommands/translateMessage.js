@@ -9,7 +9,7 @@ const {
 } = require("discord.js");
 const e = require("../data/emoji.js");
 const commandMeta = require("../util/i18n.js").getCommandMetadata();
-const { LANGUAGES, LANG_FLAGS, discordLocaleToLang, getLanguageName, translateText, batchTranslateEntries, detectLanguage, collectEmbedText } = require("../util/translateHelper.js");
+const { LANGUAGES, LANG_FLAGS, discordLocaleToLang, getLanguageName, translateText, batchTranslateEntries, detectLanguage, detectLanguageWithFallback, collectEmbedText } = require("../util/translateHelper.js");
 
 const TYPES = {
     ACTION_ROW: 1,
@@ -246,7 +246,7 @@ function collectComponentText(components) {
     return entries;
 }
 
-function detectSourceLanguage(messageContent, componentTextEntries, embeds) {
+async function detectSourceLanguage(messageContent, componentTextEntries, embeds) {
     const allText = [];
     if (messageContent) allText.push(messageContent);
     for (const entry of componentTextEntries) {
@@ -267,7 +267,7 @@ function detectSourceLanguage(messageContent, componentTextEntries, embeds) {
         }
     }
     if (allText.length === 0) return 'auto';
-    return detectLanguage(allText.join('\n'));
+    return await detectLanguageWithFallback(allText.join('\n'));
 }
 
 async function translateComponentsFromEntries(entries, sourceLang, targetLang) {
@@ -800,7 +800,7 @@ module.exports = {
                 return interaction.editReply(buildEmptyState(useTraditionalFlow, extraTexts, targetLang));
             }
 
-            detectedSource = detectSourceLanguage(messageContent, componentTextEntries, embeds);
+            detectedSource = await detectSourceLanguage(messageContent, componentTextEntries, embeds);
 
 
             if (detectedSource === targetLang) {
