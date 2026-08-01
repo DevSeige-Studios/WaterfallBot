@@ -93,7 +93,7 @@ module.exports = {
                     }
 
                     const dmResult = await funcs.sendDM(bot, user.userID, { components: [container], flags: MessageFlags.IsComponentsV2 });
-                    
+
                     if (dmResult.ok) {
                         user.voteReminderSent = true;
                         if (isInactive) {
@@ -102,11 +102,11 @@ module.exports = {
                         await user.save();
                     } else {
                         const isDMError = dmResult.err?.code === 50007 ||
-                                          dmResult.err?.code === 50013 ||
-                                          dmResult.err?.message?.includes("Cannot send messages to this user") ||
-                                          dmResult.err?.message?.includes("Missing Permissions") ||
-                                          dmResult.err?.message?.includes("User not found");
-                        
+                            dmResult.err?.code === 50013 ||
+                            dmResult.err?.message?.includes("Cannot send messages to this user") ||
+                            dmResult.err?.message?.includes("Missing Permissions") ||
+                            dmResult.err?.message?.includes("User not found");
+
                         if (isDMError) {
                             logger.debug(`Failed to send vote DM to ${user.userID}, switching to INTERACTION:`, dmResult.err);
                             user.preferences.notifications.vote = "INTERACTION";
@@ -122,7 +122,7 @@ module.exports = {
                 }
             }
 
-            const expiredMails = await GlobalMail.find({ expiry: { $lte: now } }).maxTimeMS(15000);
+            const expiredMails = await GlobalMail.find({ expiry: { $lte: now } }).maxTimeMS(15000).lean();
             const logWebhook = new WebhookClient({ id: settings.logWebhook[0], token: settings.logWebhook[1] });
             for (const mail of expiredMails) {
                 try {
