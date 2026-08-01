@@ -474,11 +474,42 @@ module.exports = {
             }
         } catch (error) {
             logger.error("AutoMod command error:", error);
-            const errorMsg = error.code === 50035 ? t('commands:automod.error_max_rules', { max: 10 }) : t('commands:automod.error_api_failed');
-            await interaction.reply({
-                content: `${e.deny} ${errorMsg}`,
-                flags: MessageFlags.Ephemeral
-            });
+            const rawErrors = error?.rawError?.errors?.[0]?.code ||
+                error?.rawError?.errors?.["0"]?._errors?.[0]?.code ||
+                '';
+            const isMaxRules = error?.code === 50035 && (
+                String(error?.message).includes('MAX_RULES_OF_TYPE_EXCEEDED') ||
+                String(rawErrors).includes('MAX_RULES_OF_TYPE_EXCEEDED') ||
+                JSON.stringify(error?.rawError || {}).includes('MAX_RULES_OF_TYPE_EXCEEDED')
+            );
+
+            let errorMsg;
+            if (isMaxRules) {
+                errorMsg = t('commands:automod.error_max_rules_type', {
+                    default: "This server has reached Discord's limit of **6 AutoMod rules** for this rule type. Please delete an existing rule of the same type before creating a new one."
+                });
+            } else if (error?.code === 50035) {
+                errorMsg = t('commands:automod.error_invalid_form', {
+                    default: 'Discord rejected the rule - check that all fields are valid.'
+                });
+            } else {
+                errorMsg = t('commands:automod.error_api_failed', {
+                    default: 'Something went wrong while communicating with Discord. Please try again.'
+                });
+            }
+
+            try {
+                if (interaction.deferred || interaction.replied) {
+                    await interaction.editReply({
+                        content: `${e.deny} ${errorMsg}`,
+                    });
+                } else {
+                    await interaction.reply({
+                        content: `${e.deny} ${errorMsg}`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+            } catch (_) { /* */ }
         }
     },
     async autocomplete(interaction) {
@@ -2375,7 +2406,7 @@ async function handleDelete(interaction, t, logger) {
     }
 
     const ruleName = rule.name;
-    
+
     try {
         await rule.delete();
 
