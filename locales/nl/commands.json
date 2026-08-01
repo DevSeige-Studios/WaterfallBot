@@ -201,6 +201,8 @@
         "error_no_permission": "You don't have permission to use this automod command.",
         "error_bot_no_permission": "I need the Manage Server permission to manage AutoMod rules.",
         "error_max_rules": "You have reached the maximum number of AutoMod rules ({{max}}).",
+        "error_max_rules_type": "This server has reached Discord's limit of **6 AutoMod rules** for this rule type. Please delete an existing rule of the same type before creating a new one.",
+        "error_invalid_form": "Discord rejected the rule - check that all fields are valid.",
         "error_api_failed": "Failed to perform AutoMod operation.",
         "error_invalid_keywords": "Please provide trigger keywords when creating a keyword rule.",
         "error_invalid_regex": "Please provide a regex pattern when creating a regex rule.",
