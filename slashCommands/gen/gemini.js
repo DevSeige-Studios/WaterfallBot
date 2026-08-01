@@ -454,7 +454,7 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                 .setAccentColor(0xFF0000)
                 .addSectionComponents(
                     new SectionBuilder()
-                        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://cdn.discordapp.com/attachments/1005773484028350506/1525954900780126350/xbrw1w6.gif'))
+                        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://cdn.discordapp.com/attachments/1485322638804127876/1533142936273817620/411360-gemini-ai.png'))
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(`# ${e.icon_gemini1} Gemini\n-# Timestamp <t:${Math.floor(Date.now() / 1000)}:R>`)
                         )
@@ -485,4 +485,4 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
 };
 
 
-// contributors: @relentiousdragon
+// contributors: @relentiousdragon, @robelo06

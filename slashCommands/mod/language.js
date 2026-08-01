@@ -52,7 +52,7 @@ module.exports = {
         );
 
         return interaction.reply({
-            content: `${e.checkmark_green} ${t('commands:language.success', { lang: lang.toUpperCase(), lng: lang })}`
+            content: `${e.checkmark_green} ${t('commands:language.success', { lang: lang.toUpperCase(), lng: lang })}\n-# Please consider contributing to the translation of this bot in crowdin: https://crowdin.com/project/waterfallbot`,
         });
     },
     help: {
@@ -65,4 +65,4 @@ module.exports = {
     }
 };
 
-// contributors: @relentiousdragon
+// contributors: @relentiousdragon, @robelo06

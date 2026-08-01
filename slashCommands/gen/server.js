@@ -29,6 +29,7 @@ module.exports = {
             const totalMembers = guild.memberCount;
             const botMembers = guild.members.cache.filter(m => m.user.bot).size;
             const humanMembers = totalMembers - botMembers;
+            const guilddescription = guild.description || 'The server has no description.';
 
             const channels = guild.channels.cache;
             const textChannels = channels.filter(c => c.type === ChannelType.GuildText).size;
@@ -48,13 +49,13 @@ module.exports = {
                     .setThumbnailAccessory(new ThumbnailBuilder().setURL(guild.iconURL({ size: 2048 })))
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(`# ${title}`),
-                        new TextDisplayBuilder().setContent(`-# ${e.ID} \`\`${guild.id}\`\``)
+                        new TextDisplayBuilder().setContent(`${guilddescription}\n-# ${e.ID} \`\`${guild.id}\`\`\n- **Verified:** ${guild.verified ? 'Yes' : 'No'}\n- **Partnered:** ${guild.partnered ? 'Yes' : 'No'}\n`)
                     );
                 container.addSectionComponents(section);
             } else {
                 container.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`# ${title}`),
-                    new TextDisplayBuilder().setContent(`-# ${e.ID} \`\`${guild.id}\`\``)
+                    new TextDisplayBuilder().setContent(`${guilddescription}\n-# ${e.ID} \`\`${guild.id}\`\`\n- **Verified:** ${guild.verified ? 'Yes' : 'No'}\n- **Partnered:** ${guild.partnered ? 'Yes' : 'No'}\n`)
                 );
             }
 
@@ -71,7 +72,7 @@ module.exports = {
             );
 
             let description = `### ${t('commands:server.owner')}\n${owner ? `${owner.user.username} (${owner.id})` : 'Unknown'}\n\n`;
-            description += `### ${t('commands:server.members')}\n${e.member} ${t('common:total')}: ${totalMembers}\n${e.reply_cont} ${t('commands:server.humans')}: ${humanMembers}\n${e.reply} ${t('commands:server.bots')}: ${botMembers}\n\n`;
+            description += `### ${t('commands:server.members')}\n${e.member} ${t('common:total')}: ${totalMembers}/${guild.maximumMembers}\n${e.reply_cont} ${t('commands:server.humans')}: ${humanMembers}\n${e.reply} ${t('commands:server.bots')}: ${botMembers}\n\n`;
             description += `### ${t('commands:server.channels')}\n${e.channel} ${t('common:total')}: ${channels.size}\n${e.reply} Text: ${textChannels} | Voice: ${voiceChannels} | Categories: ${categoryChannels}\n\n`;
 
             if (guild.premiumSubscriptionCount > 0) {
@@ -157,4 +158,4 @@ module.exports = {
     }
 };
 
-// contributors: @relentiousdragon
+// contributors: @relentiousdragon, @robelo06
