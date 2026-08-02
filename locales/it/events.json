@@ -16,7 +16,7 @@
         "vote_reminder_dm": "Hey {{user}}, puoi votare di nuovo!",
         "vote_reminder_interaction": "Hey {{user}}, solo un avviso: puoi votare di nuovo! [Vota Qui]({{voteUrl}})",
         "vote_reminder_fallback_notice": "La tua impostazione di notifica di voto è passata da DM a Interazione perché il bot non è riuscito a inviarti messaggi. Usa `/preferences notifications` per tornare indietro o disabilitare i promemoria.",
-        "vote_reminder_inactive_notice": "Stiamo mettendo in pausa i promemoria dal momento che sei stato inattivo. Riattivali in qualsiasi momento tramite `/preferenze notifiche`.",
+        "vote_reminder_inactive_notice": "Stiamo mettendo in pausa i promemoria dal momento che sei stato inattivo. Riattivali in qualsiasi momento tramite `/preferences notifications`.",
         "vote_thanks_dm": "Grazie per aver votato per Waterfall! Il tuo supporto aiuta il bot a crescere.",
         "vote_thanks_footer": "Questi DM possono essere disabilitati usando `/preferences notifications`"
     },
@@ -54,14 +54,14 @@
     },
     "welcome_message": {
         "title": "Grazie per avermi aggiunto!",
-        "description": "I'm Waterfall, a multipurpose bot made by DevSeige Studios, Waterfall has robust moderation, AI, search, games, and more - all in one place.",
-        "help_desc": "Type </help:1444598913553403969> to see all available commands and get started!",
-        "support_btn": "Support Server",
-        "github_btn": "GitHub Repository",
+        "description": "Sono Waterfall, un bot multiuso realizzato da DevSeige Studios, Waterfall ha una robusta moderazione, AI, ricerca, giochi, e molto altro - tutto in un unico posto.",
+        "help_desc": "Digita </help:1444598913553403969> per vedere tutti i comandi disponibili ed iniziare!",
+        "support_btn": "Server di Supporto",
+        "github_btn": "Repository GitHub",
         "locale_note": "The bot's language for moderation logs and other features has been set to **{{locale}}**. To switch back to English or another language, a server manager can use </language:1449979135714791628>.",
         "choose_waterfall_subtitle": "Select an avatar style for the bot in this server",
         "style_cooldown_note": "You can switch the bot's profile every 10 minutes",
-        "more_styles_note": "Use </botprofile:1454161200148381868> for more styles",
-        "current": "Current"
+        "more_styles_note": "Usa </botprofile:1454161200148381868> per altri stili",
+        "current": "Attuale"
     }
 }
