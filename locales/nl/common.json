@@ -1,8 +1,8 @@
 {
     "_instructions": {
-        "note": "DO NOT TRANSLATE ANY TEXT INSIDE {{CURLY_BRACES}} or MARKDOWN LINKS [TEXT](URL) or emojis <:emoji:1231231231232> or slash commands </commannd name:123512442423>. These are variables used by the bot code.",
-        "example": "Hello {{user}} -> Hola {{user}} (Correct) | Hola {{usuario}} (Incorrect)",
-        "note2": "DO NOT TRANSLATE 'Waterfall', this is the bot's nickname and shouldn't be translated unless the context is the actual word Waterfall."
+        "note": "VERTAAL GEEN TEXT TUSSEN DE {{CURLY_BRACES}} of MARKDOWN LINKS [TEXT](URL) of emoji's <:emoji:1231231232> of slash commands </commannd name:123512442423>. Dit zijn variabelen die gebruikt worden door de bot.",
+        "example": "Hello {{user}} -> Hallo {{user}} (Correct) | Hallo {{usuario}} (Incorrect)",
+        "note2": "VERTAAL 'Waterval' NIET, dit is de naam van de bot en mag niet worden vertaald, tenzij de context het woord Waterval is."
     },
     "error": "Er is iets misgegaan bij het uitvoeren van dit commando.",
     "timeout_error": "Er is een time-out opgetreden. Probeer het later opnieuw.",
