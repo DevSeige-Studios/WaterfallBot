@@ -13,7 +13,7 @@
 ---
 
 Waterfall is a **modular, slash-command–driven, scalable Discord bot** designed for clarity, maintainability, and performance.
-<br><br>**Note:** *Sharding in still a work in progress, so it is not recommended to use sharding for now. You may need to modify the sharding system for it to work as desired.*
+<br><br>**Note:** *Sharding is still a work in progress, so it is not recommended to use sharding for now. You may need to modify the sharding system for it to work as desired.*
 <br>
 - [Slash Commands](./commands.md)
 - Clean, consistent UX  
