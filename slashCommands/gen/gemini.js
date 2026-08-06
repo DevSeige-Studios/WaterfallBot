@@ -497,4 +497,4 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
 };
 
 
-// contributors: @relentiousdragon, @robelo06
+// contributors: @relentiousdragon, @Robelo06
