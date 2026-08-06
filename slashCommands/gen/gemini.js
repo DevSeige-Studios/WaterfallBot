@@ -164,7 +164,7 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
         if (wantsImage) {
             model = "gemini-2.5-flash-image";
         } else {
-            model = "gemini-2.5-pro";
+            model = "gemini-2.5-flash";
         }
 
         async function generateUsingGemini(model, fullPrompt, safetySettings) {
@@ -200,17 +200,24 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
             let modelsPriority = [];
             if (wantsImage) {
                 modelsPriority = [
-                    "gemini-2.0-flash-exp",
-                    "gemini-2.5-flash-preview-05-20",
+                    "gemini-2.5-flash-image",
+                    "gemini-3.1-flash-image",
+                    "gemini-2.5-flash",
+                    "gemini-3.6-flash",
                     "gemini-2.5-flash-lite",
-                    "gemini-2.0-flash"
+                    "gemini-3.5-flash"
                 ];
             } else {
                 modelsPriority = [
-                    "gemini-2.5-flash-lite",
                     "gemini-2.5-flash",
+                    "gemini-2.5-flash-lite",
+                    "gemini-3.6-flash",
+                    "gemini-3.5-flash",
+                    "gemini-3.5-flash-lite",
+                    "gemini-flash-latest",
+                    "gemini-flash-lite-latest",
                     "gemini-2.0-flash",
-                    "gemini-2.5-pro"
+                    "gemini-2.0-flash-lite"
                 ];
             }
 
@@ -226,13 +233,18 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                         logger.warn(`Quota hit for ${model}, falling back...`);
                         continue;
                     } else if (err.type === "FATAL" && err.error?.response?.status === 400) {
+                        logger.warn(`Model ${model} returned status 400, falling back...`);
                         wantsImage = false;
+                        continue;
+                    } else if (err.type === "FATAL" && err.error?.response?.status === 404) {
+                        logger.warn(`Model ${model} not found (404), falling back...`);
                         continue;
                     } else if (err.type === "FATAL" && err.error?.response?.status === 503) {
                         logger.warn(`${model} Model overloaded, falling back...`);
                         continue;
                     } else {
-                        throw err.error || err;
+                        logger.warn(`Error on ${model}: ${err.error?.message || err}, falling back...`);
+                        continue;
                     }
                 }
             }
@@ -454,7 +466,7 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                 .setAccentColor(0xFF0000)
                 .addSectionComponents(
                     new SectionBuilder()
-                        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://cdn.discordapp.com/attachments/1485322638804127876/1533142936273817620/411360-gemini-ai.png'))
+                        .setThumbnailAccessory(new ThumbnailBuilder().setURL('https://cdn.discordapp.com/attachments/1005773484028350506/1525954900780126350/xbrw1w6.gif'))
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(`# ${e.icon_gemini1} Gemini\n-# Timestamp <t:${Math.floor(Date.now() / 1000)}:R>`)
                         )
