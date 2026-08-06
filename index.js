@@ -871,7 +871,18 @@ async function reloadSlashCommandFromWebhook(bot, filePath) {
     }
     if (!actualPath) return;
 
-    delete require.cache[require.resolve(actualPath)];
+    const resolvedPath = require.resolve(actualPath);
+    const cachedModule = require.cache[resolvedPath];
+
+    if (cachedModule && cachedModule.children) {
+        for (const child of cachedModule.children) {
+            if (child.id && !child.id.includes('node_modules') && !/[/\\]\.[^/\\]/.test(child.id)) {
+                delete require.cache[child.id];
+            }
+        }
+    }
+
+    delete require.cache[resolvedPath];
 
     try {
         const newCommand = require(actualPath);
