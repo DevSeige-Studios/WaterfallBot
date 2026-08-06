@@ -151,14 +151,18 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
         }
 
         const lowerPrompt = prompt.toLowerCase();
-        let wantsImage =
+        const userRequestedImage =
             lowerPrompt.startsWith("generate an image") ||
             lowerPrompt.startsWith("create an image") ||
             lowerPrompt.startsWith("make an image") ||
             lowerPrompt.startsWith("draw an image") ||
             lowerPrompt.startsWith("make me an image") ||
             lowerPrompt.startsWith("generate me an image") ||
-            lowerPrompt.startsWith("create me an image");
+            lowerPrompt.startsWith("create me an image") ||
+            lowerPrompt.includes("generate an image") ||
+            lowerPrompt.includes("create an image") ||
+            lowerPrompt.includes("draw an image");
+        let wantsImage = userRequestedImage;
 
         let model = "";
         if (wantsImage) {
@@ -285,6 +289,19 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
 
 
             let { text, imageData } = parseGeminiResponse(response, usedModel);
+
+            if (userRequestedImage && !imageData && usageCount < 3) {
+                try {
+                    const cleanPrompt = prompt.replace(/^(generate|create|make|draw)(\s+me)?\s+(an?\s+)?image(\s+of)?\s*/i, '');
+                    const pollUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt || prompt)}?width=1024&height=1024&nologo=true&safe=true`;
+                    const imgRes = await axios.get(pollUrl, { responseType: 'arraybuffer', timeout: 15000 });
+                    if (imgRes.status === 200 && imgRes.data) {
+                        imageData = Buffer.from(imgRes.data).toString('base64');
+                    }
+                } catch (err) {
+                    logger.warn("[Image Fallback Error]", err.message);
+                }
+            }
             /*
                   let text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
                   let imageData = null;
@@ -495,6 +512,4 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
         created: 1765271948
     }
 };
-
-
 // contributors: @relentiousdragon, @Robelo06
