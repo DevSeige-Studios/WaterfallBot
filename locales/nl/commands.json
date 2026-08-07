@@ -2,7 +2,7 @@
     "help": {
         "name": "help",
         "description": "Bekijk alle beschikbare commando's",
-        "title": "Waterval commando's",
+        "title": "Waterfall commando's",
         "no_commands": "Geen commando’s beschikbaar.",
         "placeholder": "Selecteer een categorie",
         "view_category": "Bekijk {{category}} commando's",
