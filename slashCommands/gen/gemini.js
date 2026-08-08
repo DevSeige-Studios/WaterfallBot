@@ -216,11 +216,9 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
             }
 
             let response = null;
-            let usedModel = null;
             for (const model of modelsPriority) {
                 try {
                     response = await generateUsingGemini(model, fullPrompt, safetySettings);
-                    usedModel = model;
                     break;
                 } catch (err) {
                     if (err.type === "RATE_LIMIT") {
