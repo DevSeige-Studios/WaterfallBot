@@ -26,9 +26,13 @@ const botDetectionSettingsSchema = mongoose.Schema({
         accountAge10m: { type: Boolean, default: true },
         accountAge1h: { type: Boolean, default: true },
         accountAge1d: { type: Boolean, default: true },
-        accountAge1w: { type: Boolean, default: false },
+        accountAge1w: { type: Boolean, default: true },
+        accountAge2w: { type: Boolean, default: false },
+        accountAge4w: { type: Boolean, default: false },
         suspiciousUsername: { type: Boolean, default: true },
-        messageBehavior: { type: Boolean, default: true }
+        messageBehavior: { type: Boolean, default: true },
+        firstMessageAnalysis: { type: Boolean, default: true },
+        crossChannelSpam: { type: Boolean, default: true }
     }
 }, { versionKey: false });
 
@@ -40,19 +44,43 @@ const newUserTrackingSchema = mongoose.Schema({
     linksSent: { type: Number, default: 0 },
     mentionCount: { type: Number, default: 0 },
     channelsUsed: [{ type: String }],
+    channelTimestamps: [{
+        channelID: { type: String },
+        timestamp: { type: Date, default: Date.now }
+    }],
     similarMessages: [{ type: String }],
+    firstMessage: {
+        sent: { type: Boolean, default: false },
+        hadLinks: { type: Boolean, default: false },
+        hadAttachments: { type: Boolean, default: false },
+        hadSuspiciousLinks: { type: Boolean, default: false },
+        linkCount: { type: Number, default: 0 },
+        attachmentCount: { type: Number, default: 0 },
+        timestamp: { type: Date }
+    },
     analyzed: { type: Boolean, default: false },
     timestamp: { type: Date, default: Date.now }
 }, { versionKey: false });
 
 newUserTrackingSchema.index({ serverID: 1, userID: 1 }, { unique: true });
 newUserTrackingSchema.index({ timestamp: 1 }, { expireAfterSeconds: 2 * 60 * 60 });
+
+const activeUserStatusSchema = mongoose.Schema({
+    serverID: { type: String, required: true },
+    userID: { type: String, required: true },
+    initialConfidence: { type: Number, default: 0 },
+    clearedAt: { type: Date, default: Date.now },
+    lastMessageAt: { type: Date, default: Date.now },
+    firstMessageReset: { type: Boolean, default: false }
+}, { versionKey: false });
+
+activeUserStatusSchema.index({ serverID: 1, userID: 1 }, { unique: true });
+activeUserStatusSchema.index({ lastMessageAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 //
 module.exports = {
     GlobalUserInfractions: mongoose.model("globalUserInfractions", globalUserInfractionsSchema),
     BotDetectionSettings: mongoose.model("botDetectionSettings", botDetectionSettingsSchema),
-    NewUserTracking: mongoose.model("newUserTracking", newUserTrackingSchema)
+    NewUserTracking: mongoose.model("newUserTracking", newUserTrackingSchema),
+    ActiveUserStatus: mongoose.model("activeUserStatus", activeUserStatusSchema)
 };
-
-
 // contributors: @relentiousdragon

@@ -65,4 +65,4 @@ module.exports = {
     }
 };
 
-// contributors: @relentiousdragon, @robelo06
+// contributors: @relentiousdragon, @Robelo06
