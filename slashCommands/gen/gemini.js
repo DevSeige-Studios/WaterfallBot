@@ -161,13 +161,6 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
             lowerPrompt.startsWith("create me an image");
         let wantsImage = requestedImage;
 
-        let model = "";
-        if (wantsImage) {
-            model = "gemini-2.5-flash-image";
-        } else {
-            model = "gemini-2.5-flash";
-        }
-
         async function generateUsingGemini(model, fullPrompt, safetySettings) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${gemini_key}`;
             try {
@@ -254,7 +247,7 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                 throw new Error("All Gemini models exhausted.");
             }
 
-            function parseGeminiResponse(response, model) {
+            function parseGeminiResponse(response) {
                 if (!response || !response.candidates || response.candidates.length === 0) {
                     logger.debug("[/GEMINI] No candidates found in response");
                     return { text: t('commands:gemini.no_response'), imageData: null };
@@ -285,7 +278,7 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
             }
 
 
-            let { text, imageData } = parseGeminiResponse(response, usedModel);
+            let { text, imageData } = parseGeminiResponse(response);
             /*
                   let text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
                   let imageData = null;
@@ -384,18 +377,10 @@ ALWAYS INCLUDE AN IMAGE LINK RELATED TO YOUR RESPONSE IN THE FIRST LINE IF YOU H
                 label = label.slice(0, 40);
                 return new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(label).setURL(url);
             }).filter(Boolean);
-            let safeThumb = (thumbLine && thumbLine.trim().toLowerCase() !== 'default' && isValidImageUrl(thumbLine.trim())) ? thumbLine.trim() : 'https://cdn.discordapp.com/attachments/1005773484028350506/1525954900780126350/xbrw1w6.gif';
+            let safeThumb = (thumbLine && thumbLine.trim().toLowerCase() !== 'default' && /^https?:\/\/.+/i.test(thumbLine.trim())) ? thumbLine.trim() : 'https://cdn.discordapp.com/attachments/1005773484028350506/1525954900780126350/xbrw1w6.gif';
             let safeColor = (colorLine && colorLine.trim().toLowerCase() !== 'default' && /^#([0-9a-f]{6})$/i.test(colorLine.trim())) ? colorLine.trim() : '#4285F4';
-            async function validateImageUrl(url) {
-                try {
-                    const head = await axios.head(url, { timeout: 4000 });
-                    const type = head.headers['content-type'] || '';
-                    if (head.status === 200 && type.startsWith('image/')) return true;
-                } catch (e) { }
-                return false;
-            }
             if (safeThumb !== 'https://cdn.discordapp.com/attachments/1005773484028350506/1525954900780126350/xbrw1w6.gif') {
-                const valid = await validateImageUrl(safeThumb);
+                const valid = await isValidImageUrl(safeThumb);
                 if (!valid) {
                     safeThumb = 'https://cdn.discordapp.com/attachments/1005773484028350506/1525954900780126350/xbrw1w6.gif';
                 }
