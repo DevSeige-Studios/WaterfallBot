@@ -886,6 +886,7 @@ module.exports = {
             }
 
             if (subcommand === 'voice') {
+                const formatDuration = (seconds) => funcs.formatDurationPretty((seconds || 0) * 1000, { maxUnit: 'd', excludeWeeks: true });
                 const allVcData = await getVcLeaderboard(guildId);
                 const vcLeaderboard = allVcData.slice(0, 10);
                 const restVc = allVcData.slice(10);
