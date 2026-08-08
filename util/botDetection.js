@@ -668,7 +668,6 @@ async function checkCrossChannelLinkSpam(message, settings) {
 
     const links = extractLinks(message.content);
     const hasAttachments = message.attachments.size > 0;
-    const attachmentCount = message.attachments.size;
 
     if (links.length === 0 && !hasAttachments) {
         return { isSpam: false, confidence: 0, reasons: [] };
