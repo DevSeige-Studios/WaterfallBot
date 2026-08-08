@@ -130,6 +130,8 @@ async function handleBotDetection(bot, member) {
         if (detectionSettings.checks?.messageBehavior && confidence >= 10) {
             await botDetection.createTracking(member.guild.id, member.user.id);
         }
+
+        await botDetection.markUserAsActive(member.guild.id, member.user.id, confidence);
     } catch (error) {
         logger.debug(`[BotDetection] Error processing member ${member.user.tag}: ${error.message}`);
     }

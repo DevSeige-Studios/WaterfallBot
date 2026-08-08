@@ -51,12 +51,23 @@ async function trackBotDetection(message) {
         const settings = await botDetection.getSettings(message.guild.id);
         if (!settings?.enabled) return;
 
+        const activeStatus = await botDetection.checkActiveUserBypass(message.guild.id, message.author.id);
+
+        if (activeStatus.bypass) {
+            await botDetection.touchActiveUserMessage(message.guild.id, message.author.id);
+            return;
+        }
+
+        if (activeStatus.needsReset) {
+            await botDetection.resetInactiveUser(message.guild.id, message.author.id);
+        }
+
         const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
         if (member && (Date.now() - member.joinedTimestamp) < 2 * 60 * 60 * 1000) {
             const spamCheck = await botDetection.checkCrossChannelLinkSpam(message, settings);
 
             if (spamCheck.isSpam) {
-                logger.debug(`[BotDetection] Spam detected for ${message.author.id}. Actions: Delete=${spamCheck.messages.length} msgs, Timeout=${settings.allowTimeout}, Log=${settings.logAlerts}`);
+                logger.debug(`[BotDetection] Spam detected for ${message.author.id}. Confidence=${spamCheck.confidence}%, Actions: Delete=${spamCheck.messages.length} msgs, Timeout=${settings.allowTimeout}, Log=${settings.logAlerts}`);
 
                 if (spamCheck.messages?.length > 0) {
                     for (const msgInfo of spamCheck.messages) {
@@ -76,7 +87,7 @@ async function trackBotDetection(message) {
                     (settings.timeoutDuration || 60 * 1000) : 60 * 1000;
 
                 try {
-                    await member.timeout(timeoutDuration, `[Bot Detection] Cross-channel link spam detected`);
+                    await member.timeout(timeoutDuration, `[Bot Detection] Cross-channel link spam detected (confidence: ${spamCheck.confidence}%)`);
                 } catch (e) {
                     logger.debug(`[BotDetection] Failed to timeout ${message.author.id}: ${e.message}`);
                 }
@@ -85,25 +96,39 @@ async function trackBotDetection(message) {
                     const modLog = require("../util/modLog.js");
                     await modLog.logEvent(message.client, message.guild.id, 'botDetectionAlert', {
                         member: member,
-                        confidence: 100,
+                        confidence: spamCheck.confidence,
                         reasons: spamCheck.reasons,
                         globalInfractions: 0,
-                        riskLevel: 'high'
+                        riskLevel: spamCheck.confidence >= 80 ? 'severe' : spamCheck.confidence >= 60 ? 'high' : 'moderate'
                     });
                 }
+            } else if (spamCheck.firstMessageSuspicious && spamCheck.confidence >= 30 && settings.logAlerts) {
+                const modLog = require("../util/modLog.js");
+                await modLog.logEvent(message.client, message.guild.id, 'botDetectionAlert', {
+                    member: member,
+                    confidence: spamCheck.confidence,
+                    reasons: spamCheck.reasons,
+                    globalInfractions: 0,
+                    riskLevel: 'low'
+                });
             }
         }
 
         const urlRegex = /(https?:\/\/[^\s]+)/gi;
-        const linksCount = (message.content.match(urlRegex) || []).length;
+        const links = message.content.match(urlRegex) || [];
+        const linksCount = links.length;
         const mentionCount = message.mentions.users.size + message.mentions.roles.size;
         const contentHash = message.content.length > 20 ? message.content.substring(0, 50).toLowerCase().replace(/\s/g, '') : null;
+        const hasSuspiciousLinks = links.some(l => botDetection.isSuspiciousLink(l));
 
         await botDetection.updateTracking(message.guild.id, message.author.id, {
             channelID: message.channel.id,
             linksCount,
             mentionCount,
-            contentHash
+            contentHash,
+            hasAttachments: message.attachments.size > 0,
+            attachmentCount: message.attachments.size,
+            hasSuspiciousLinks
         });
     } catch (error) {
         //
