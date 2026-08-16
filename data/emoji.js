@@ -92,6 +92,14 @@ const emojis = {
   trash_can: "<:i:1442579071258202112>",
   member: "<:i:1442579068850671744>",
   email: "<:at:1456266012323479716>",
+  // BUCKSHOT ROULETTE
+  bs_saw: "<:saw:1538304174410825768>",
+  bs_bananas: "<:bananas:1538304163853893703>",
+  bs_cuffs: "<:cuffs:1538304166492114974>",
+  bs_cola: "<:cola:1538304169406898249>",
+  bs_glass: "<:glass:1538304171856633957>",
+  bs_shell: "<:12gauge:1538307749924835348>",
+  bs_slug: "<:slug:1538307747613773965>",
   // APP ICONS
   icon_bing: "<:Bing:1439628469381365872>",
   icon_google: "<:Google:1439628466789154846>",
