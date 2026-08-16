@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, SectionBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const e = require('../../data/emoji.js');
 const funcs = require('../../util/functions.js');
 const commandMeta = require('../../util/i18n.js').getCommandMetadata();
@@ -186,10 +186,8 @@ function removeGame(gameId) {
 }
 
 function formatHp(hp, maxHp) {
-    const green = `${e.lightning_green}` || '🟩';
-    const red = `${e.lightning_red}` || '🟥';
-    const greenChar = green || '🟩';
-    const redChar = red || '🟥';
+    const greenChar = `${e.lightning_green}`.trim() || '🟩';
+    const redChar = `${e.lightning_red}`.trim() || '🟥';
     let bar = '';
     for (let i = 0; i < hp; i++) bar += greenChar;
     for (let i = 0; i < Math.max(0, maxHp - hp); i++) bar += redChar;
@@ -290,8 +288,8 @@ function formatLogLine(log, t) {
 
 function buildGameOverContainer(state, winner, t, forfeiterId = null) {
     const isPvE = state.mode === 'pve';
-    let accentColor = 0x57F287;
-    let titleText = '';
+    let accentColor;
+    let titleText;
 
     if (forfeiterId) {
         accentColor = 0xED4245;
@@ -335,7 +333,6 @@ function buildGameOverContainer(state, winner, t, forfeiterId = null) {
 
 function buildGameContainer(gameId, state, t, extraInfo = '') {
     const currentP = engine.getCurrentPlayer(state);
-    const alivePlayers = engine.getAlivePlayers(state);
     const container = new ContainerBuilder().setAccentColor(0x5865F2);
 
     let headerText = `## ${e.discord_orbs} ${t('commands:buckshot.title')}\n`;

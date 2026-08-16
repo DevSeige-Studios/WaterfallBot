@@ -1,12 +1,12 @@
 # Waterfall Commands
 
-*Last updated: Sun, 12 Jul 2026 19:56:20 GMT*
+*Last updated: Sun, 16 Aug 2026 10:08:07 GMT*
 
 ## Commands
 
 - 🤖 **Bot** (8)
 - 💻 **Dev** (13)
-- 🎲 **Games** (3)
+- 🎲 **Games** (4)
 - 🧭 **General** (9)
 - 🛡️ **Moderation** (9)
 - ⚙️ **Utility** (7)
@@ -216,6 +216,12 @@ Manually trigger hourly or daily worker tasks (DEV ONLY)
 ---
 
 ## 🎲 Games
+
+### `/buckshot`
+
+Play high-stakes Buckshot Roulette against Waterfall or friends (Up to 4 players)
+
+---
 
 ### `/connect4`
 

@@ -262,7 +262,7 @@ function drawBoardBackground(ctx, board = null, isNightmare = false, gameId = nu
 }
 
 function drawFullBoard(ctx, board, colors, winningCoords = [], gameId = null) {
-    const isNightmare = Boolean(colors?.p2?.isNightmare || colors?.p1?.isNightmare || colors?.isNightmare);
+    const isNightmare = Boolean(colors.p2?.isNightmare || colors.p1?.isNightmare || colors.isNightmare);
     drawBoardBackground(ctx, board, isNightmare, gameId);
     if (gameId) drawSideSignature(ctx, gameId);
     for (let r = 0; r < ROWS; r++) {
@@ -469,7 +469,7 @@ async function renderAnimatedBoard(board, colors, lastMove, gameId = null) {
         }
 
         const isWinMove = connect4AI.checkWin(board, lastMove.player);
-        const isNightmare = Boolean(colors?.p2?.isNightmare || colors?.p1?.isNightmare || colors?.isNightmare);
+        const isNightmare = Boolean(colors.p2?.isNightmare || colors.p1?.isNightmare || colors.isNightmare);
         const totalPieces = board.flat().filter(c => c !== EMPTY).length;
         const isLate = totalPieces >= 24;
 
@@ -892,25 +892,22 @@ module.exports = {
                 .setCustomId(`c4_diff_${userId}_normal`)
                 .setLabel(t('commands:connect4.difficulty_normal'))
                 .setStyle(ButtonStyle.Success);
-            if (e.lightning_green && `${e.lightning_green}`.trim() !== '') {
-                normalBtn.setEmoji(e.lightning_green);
-            }
+            const emojiGreen = funcs.parseEmoji(e.lightning_green);
+            if (emojiGreen) normalBtn.setEmoji(emojiGreen);
 
             const hardBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_hard`)
                 .setLabel(t('commands:connect4.difficulty_hard'))
                 .setStyle(ButtonStyle.Primary);
-            if (e.lightning_yellow && `${e.lightning_yellow}`.trim() !== '') {
-                hardBtn.setEmoji(e.lightning_yellow);
-            }
+            const emojiYellow = funcs.parseEmoji(e.lightning_yellow);
+            if (emojiYellow) hardBtn.setEmoji(emojiYellow);
 
             const nightmareBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_nightmare`)
                 .setLabel(t('commands:connect4.difficulty_nightmare'))
                 .setStyle(ButtonStyle.Danger);
-            if (e.lightning_red && `${e.lightning_red}`.trim() !== '') {
-                nightmareBtn.setEmoji(e.lightning_red);
-            }
+            const emojiRed = funcs.parseEmoji(e.lightning_red);
+            if (emojiRed) nightmareBtn.setEmoji(emojiRed);
 
             const diffContainer = new ContainerBuilder()
                 .setAccentColor(0x5865F2)
@@ -967,27 +964,24 @@ module.exports = {
                 .setLabel(t('commands:connect4.difficulty_normal'))
                 .setStyle(difficulty === 'normal' ? ButtonStyle.Success : ButtonStyle.Secondary)
                 .setDisabled(true);
-            if (e.lightning_green && `${e.lightning_green}`.trim() !== '') {
-                normalBtn.setEmoji(e.lightning_green);
-            }
+            const emojiGreen = funcs.parseEmoji(e.lightning_green);
+            if (emojiGreen) normalBtn.setEmoji(emojiGreen);
 
             const hardBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_hard`)
                 .setLabel(t('commands:connect4.difficulty_hard'))
                 .setStyle(difficulty === 'hard' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(true);
-            if (e.lightning_yellow && `${e.lightning_yellow}`.trim() !== '') {
-                hardBtn.setEmoji(e.lightning_yellow);
-            }
+            const emojiYellow = funcs.parseEmoji(e.lightning_yellow);
+            if (emojiYellow) hardBtn.setEmoji(emojiYellow);
 
             const nightmareBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_nightmare`)
                 .setLabel(t('commands:connect4.difficulty_nightmare'))
                 .setStyle(difficulty === 'nightmare' ? ButtonStyle.Danger : ButtonStyle.Secondary)
                 .setDisabled(true);
-            if (e.lightning_red && `${e.lightning_red}`.trim() !== '') {
-                nightmareBtn.setEmoji(e.lightning_red);
-            }
+            const emojiRed = funcs.parseEmoji(e.lightning_red);
+            if (emojiRed) nightmareBtn.setEmoji(emojiRed);
 
             const loadingContainer = new ContainerBuilder()
                 .setAccentColor(0x5865F2)
