@@ -8,7 +8,9 @@ const analyticsSchema = new mongoose.Schema({
     rpsWaterfallWins: { type: Number, default: 0 },
     rpsHumanWins: { type: Number, default: 0 },
     connect4WaterfallWins: { type: Number, default: 0 },
-    connect4HumanWins: { type: Number, default: 0 }
+    connect4HumanWins: { type: Number, default: 0 },
+    buckshotWaterfallWins: { type: Number, default: 0 },
+    buckshotHumanWins: { type: Number, default: 0 }
 });
 
 
