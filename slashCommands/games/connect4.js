@@ -958,24 +958,18 @@ module.exports = {
                 .setLabel(t('commands:connect4.difficulty_normal'))
                 .setStyle(difficulty === 'normal' ? ButtonStyle.Success : ButtonStyle.Secondary)
                 .setDisabled(true);
-            const emojiGreen = funcs.parseEmoji(e.lightning_green);
-            if (emojiGreen) normalBtn.setEmoji(emojiGreen);
 
             const hardBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_hard`)
                 .setLabel(t('commands:connect4.difficulty_hard'))
                 .setStyle(difficulty === 'hard' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(true);
-            const emojiYellow = funcs.parseEmoji(e.lightning_yellow);
-            if (emojiYellow) hardBtn.setEmoji(emojiYellow);
 
             const nightmareBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_nightmare`)
                 .setLabel(t('commands:connect4.difficulty_nightmare'))
                 .setStyle(difficulty === 'nightmare' ? ButtonStyle.Danger : ButtonStyle.Secondary)
                 .setDisabled(true);
-            const emojiRed = funcs.parseEmoji(e.lightning_red);
-            if (emojiRed) nightmareBtn.setEmoji(emojiRed);
 
             const loadingContainer = new ContainerBuilder()
                 .setAccentColor(0x5865F2)
