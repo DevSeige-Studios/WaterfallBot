@@ -1,7 +1,6 @@
 require("dotenv").config();
 const { SlashCommandBuilder, ContainerBuilder, SectionBuilder, SeparatorBuilder, TextDisplayBuilder, MediaGalleryBuilder, MessageFlags, SeparatorSpacingSize, MediaGalleryItemBuilder, ThumbnailBuilder } = require('discord.js');
 const axios = require('axios');
-const GOOGLE_TENOR = process.env.GOOGLE_TENOR_API_KEY;
 const e = require("../../data/emoji.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const versions = ["20240206", "20230216", "20221001", "20201001"];
@@ -31,28 +30,20 @@ async function findValidEmojiImage(emoji1, emoji2) {
     return null;
 }
 
-async function getEmojiUrl(primary1, primary2, emoji1, emoji2) {
-    let emojiUrl = await findValidEmojiImage(primary1, primary2);
+async function getEmojiUrl(emoji1, emoji2) {
+    let emojiUrl = await findValidEmojiImage(emoji1, emoji2);
     if (!emojiUrl) {
-        const stripped1 = stripVariationSelectors(primary1);
-        const stripped2 = stripVariationSelectors(primary2);
+        emojiUrl = await findValidEmojiImage(emoji2, emoji1);
+    }
+    if (!emojiUrl) {
+        const stripped1 = stripVariationSelectors(emoji1);
+        const stripped2 = stripVariationSelectors(emoji2);
         emojiUrl = await findValidEmojiImage(stripped1, stripped2);
     }
     if (!emojiUrl) {
-        const stripped1 = stripVariationSelectors(primary1);
-        const stripped2 = stripVariationSelectors(primary2);
+        const stripped1 = stripVariationSelectors(emoji1);
+        const stripped2 = stripVariationSelectors(emoji2);
         emojiUrl = await findValidEmojiImage(stripped2, stripped1);
-    }
-    if (!emojiUrl && GOOGLE_TENOR) {
-        const query = `${emoji1}_${emoji2}`;
-        const url = `https://tenor.googleapis.com/v2/featured?key=${GOOGLE_TENOR}&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v6&q=${query}`;
-        try {
-            const response = await axios.get(url);
-            const data = response.data;
-            if (data.results && data.results.length > 0) {
-                emojiUrl = data.results[0].media_formats.png_transparent.url;
-            }
-        } catch { }
     }
     return emojiUrl;
 }
@@ -105,7 +96,7 @@ module.exports = {
                 return;
             }
             await interaction.reply({ content: `${e.loading} ${t("common:loading")}` });
-            const emojiUrl = await getEmojiUrl(emoji1, emoji2, emoji1, emoji2);
+            const emojiUrl = await getEmojiUrl(emoji1, emoji2);
             if (!emojiUrl) {
                 await interaction.editReply({
                     content: `${e.pixel_cross} ${t('commands:generate.emoji.error')}`,

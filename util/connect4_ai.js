@@ -80,6 +80,17 @@ function getGlobalStats() {
     };
 }
 
+const COLUMN_ORDER = [3, 2, 4, 1, 5, 0, 6];
+
+const POSITION_WEIGHTS = [
+    [3, 4, 5, 7, 5, 4, 3],
+    [4, 6, 8, 10, 8, 6, 4],
+    [5, 8, 11, 13, 11, 8, 5],
+    [5, 8, 11, 13, 11, 8, 5],
+    [4, 6, 8, 10, 8, 6, 4],
+    [3, 4, 5, 7, 5, 4, 3]
+];
+
 function createBoard() {
     return Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY));
 }
@@ -93,13 +104,7 @@ function isValidMove(board, col) {
 }
 
 function getValidMoves(board) {
-    const validMoves = [];
-    for (let col = 0; col < COLS; col++) {
-        if (isValidMove(board, col)) {
-            validMoves.push(col);
-        }
-    }
-    return validMoves;
+    return COLUMN_ORDER.filter(col => isValidMove(board, col));
 }
 
 function dropPiece(board, col, piece) {
@@ -176,20 +181,27 @@ function evaluateWindow(window, piece) {
     let score = 0;
     const oppPiece = piece === AI ? HUMAN : AI;
 
-    let pieceCount = window.filter(p => p === piece).length;
-    let emptyCount = window.filter(p => p === EMPTY).length;
-    let oppCount = window.filter(p => p === oppPiece).length;
+    let pieceCount = 0;
+    let emptyCount = 0;
+    let oppCount = 0;
+    for (let i = 0; i < 4; i++) {
+        if (window[i] === piece) pieceCount++;
+        else if (window[i] === EMPTY) emptyCount++;
+        else if (window[i] === oppPiece) oppCount++;
+    }
 
     if (pieceCount === 4) {
-        score += 10000;
+        score += 100000;
     } else if (pieceCount === 3 && emptyCount === 1) {
-        score += 5;
+        score += 100;
     } else if (pieceCount === 2 && emptyCount === 2) {
-        score += 2;
+        score += 10;
     }
 
     if (oppCount === 3 && emptyCount === 1) {
-        score -= 4;
+        score -= 120;
+    } else if (oppCount === 2 && emptyCount === 2) {
+        score -= 15;
     }
 
     return score;
@@ -197,17 +209,21 @@ function evaluateWindow(window, piece) {
 
 function scorePosition(board, piece) {
     let score = 0;
+    const oppPiece = piece === AI ? HUMAN : AI;
 
-    const centerArray = [];
     for (let r = 0; r < ROWS; r++) {
-        centerArray.push(board[r][Math.floor(COLS / 2)]);
+        for (let c = 0; c < COLS; c++) {
+            if (board[r][c] === piece) {
+                score += POSITION_WEIGHTS[r][c];
+            } else if (board[r][c] === oppPiece) {
+                score -= POSITION_WEIGHTS[r][c];
+            }
+        }
     }
-    const centerCount = centerArray.filter(p => p === piece).length;
-    score += centerCount * 3;
 
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS - 3; c++) {
-            const window = board[r].slice(c, c + 4);
+            const window = [board[r][c], board[r][c + 1], board[r][c + 2], board[r][c + 3]];
             score += evaluateWindow(window, piece);
         }
     }
@@ -237,16 +253,37 @@ function isTerminalNode(board) {
     return checkWin(board, AI) || checkWin(board, HUMAN) || getValidMoves(board).length === 0;
 }
 
-function minimax(board, depth, alpha, beta, maximizingPlayer) {
+function findImmediateWin(board, piece) {
+    const validMoves = getValidMoves(board);
+    for (const col of validMoves) {
+        const row = dropPiece(board, col, piece);
+        const win = checkWin(board, piece);
+        undoPiece(board, col, row);
+        if (win) return col;
+    }
+    return -1;
+}
+
+function getBoardKey(board) {
+    let key = '';
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            key += board[r][c];
+        }
+    }
+    return key;
+}
+
+function minimax(board, depth, alpha, beta, maximizingPlayer, memo) {
     const validMoves = getValidMoves(board);
     const isTerminal = isTerminalNode(board);
 
     if (depth === 0 || isTerminal) {
         if (isTerminal) {
             if (checkWin(board, AI)) {
-                return [null, 10000000];
+                return [null, 10000000 + depth];
             } else if (checkWin(board, HUMAN)) {
-                return [null, -10000000];
+                return [null, -10000000 - depth];
             } else {
                 return [null, 0];
             }
@@ -255,54 +292,172 @@ function minimax(board, depth, alpha, beta, maximizingPlayer) {
         }
     }
 
+    const boardKey = `${getBoardKey(board)}_${depth}_${maximizingPlayer ? 1 : 0}`;
+    if (memo && memo.has(boardKey)) {
+        return memo.get(boardKey);
+    }
+
+    let bestColumn = validMoves[0];
+
     if (maximizingPlayer) {
         let value = -Infinity;
-        let column = validMoves[Math.floor(Math.random() * validMoves.length)];
         for (const col of validMoves) {
             const row = dropPiece(board, col, AI);
-            const newScore = minimax(board, depth - 1, alpha, beta, false)[1];
+            const newScore = minimax(board, depth - 1, alpha, beta, false, memo)[1];
             undoPiece(board, col, row);
             if (newScore > value) {
                 value = newScore;
-                column = col;
+                bestColumn = col;
             }
             alpha = Math.max(alpha, value);
             if (alpha >= beta) break;
         }
-        return [column, value];
+        const result = [bestColumn, value];
+        if (memo) memo.set(boardKey, result);
+        return result;
     } else {
         let value = Infinity;
-        let column = validMoves[Math.floor(Math.random() * validMoves.length)];
         for (const col of validMoves) {
             const row = dropPiece(board, col, HUMAN);
-            const newScore = minimax(board, depth - 1, alpha, beta, true)[1];
+            const newScore = minimax(board, depth - 1, alpha, beta, true, memo)[1];
             undoPiece(board, col, row);
             if (newScore < value) {
                 value = newScore;
-                column = col;
+                bestColumn = col;
             }
             beta = Math.min(beta, value);
             if (alpha >= beta) break;
         }
-        return [column, value];
+        const result = [bestColumn, value];
+        if (memo) memo.set(boardKey, result);
+        return result;
     }
 }
 
-function getAIMove(board) {
+function getAIMove(board, difficulty = 'hard') {
+    const validMoves = getValidMoves(board);
+    if (validMoves.length === 0) return 0;
+
     if (board.every(row => row.every(cell => cell === EMPTY))) {
         return 3;
     }
-    const [col, minimaxScore] = minimax(board, 5, -Infinity, Infinity, true);
-    return col;
+
+    const winningCol = findImmediateWin(board, AI);
+    if (winningCol !== -1) return winningCol;
+
+    const blockingCol = findImmediateWin(board, HUMAN);
+    if (blockingCol !== -1) return blockingCol;
+
+    const mode = (difficulty || 'hard').toLowerCase();
+
+    if (mode === 'normal') {
+        if (Math.random() < 0.15 && validMoves.length > 1) {
+            const safeMoves = validMoves.filter(col => {
+                const row = dropPiece(board, col, AI);
+                let givesWin = false;
+                if (row > 0) {
+                    board[row - 1][col] = HUMAN;
+                    if (checkWin(board, HUMAN)) givesWin = true;
+                    board[row - 1][col] = EMPTY;
+                }
+                undoPiece(board, col, row);
+                return !givesWin;
+            });
+            const candidates = safeMoves.length > 0 ? safeMoves : validMoves;
+            return candidates[Math.floor(Math.random() * candidates.length)];
+        }
+
+        const memo = new Map();
+        const [col] = minimax(board, 4, -Infinity, Infinity, true, memo);
+        return col !== null ? col : validMoves[0];
+    }
+
+    const targetDepth = mode === 'nightmare' ? 7 : 6;
+    const memo = new Map();
+    const scoredMoves = [];
+
+    for (const col of validMoves) {
+        const row = dropPiece(board, col, AI);
+        let createsInstantLoss = false;
+        if (row > 0) {
+            board[row - 1][col] = HUMAN;
+            if (checkWin(board, HUMAN)) createsInstantLoss = true;
+            board[row - 1][col] = EMPTY;
+        }
+
+        const score = minimax(board, targetDepth - 1, -Infinity, Infinity, false, memo)[1];
+        undoPiece(board, col, row);
+
+        const adjustedScore = createsInstantLoss ? score - 50000 : score;
+        scoredMoves.push({ col, score: adjustedScore });
+    }
+
+    scoredMoves.sort((a, b) => b.score - a.score);
+    return scoredMoves[0].col;
 }
 
-async function getAIMoveAsync(board) {
+async function getAIMoveAsync(board, difficulty = 'hard') {
     try {
-        return await workerPool.execute('connect4', { type: 'ai', board });
+        return await workerPool.execute('connect4', { type: 'ai', board, difficulty });
     } catch (err) {
         logger.warn(`[Connect4 AI] Worker failed, using main thread: ${err.message}`);
-        return getAIMove(board);
+        return getAIMove(board, difficulty);
     }
+}
+function countThreats(board, piece) {
+    let threats = 0;
+    const check = (w) => {
+        let p = 0, e = 0;
+        for (let i = 0; i < 4; i++) { if (w[i] === piece) p++; else if (w[i] === EMPTY) e++; }
+        if (p === 3 && e === 1) threats++;
+    };
+    for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS - 3; c++)
+            check([board[r][c], board[r][c + 1], board[r][c + 2], board[r][c + 3]]);
+    for (let c = 0; c < COLS; c++)
+        for (let r = 0; r < ROWS - 3; r++)
+            check([board[r][c], board[r + 1][c], board[r + 2][c], board[r + 3][c]]);
+    for (let r = 0; r < ROWS - 3; r++)
+        for (let c = 0; c < COLS - 3; c++)
+            check([board[r][c], board[r + 1][c + 1], board[r + 2][c + 2], board[r + 3][c + 3]]);
+    for (let r = 3; r < ROWS; r++)
+        for (let c = 0; c < COLS - 3; c++)
+            check([board[r][c], board[r - 1][c + 1], board[r - 2][c + 2], board[r - 3][c + 3]]);
+    return threats;
+}
+//
+function analyzeMoveContext(board, aiCol, playerCol) {
+    const totalPieces = board.flat().filter(c => c !== EMPTY).length;
+    const aiThreats = countThreats(board, AI);
+    const humanThreats = countThreats(board, HUMAN);
+
+    let blocked = false;
+    let aiRow = -1;
+    for (let r = 0; r < ROWS; r++) {
+        if (board[r][aiCol] === AI) { aiRow = r; break; }
+    }
+    if (aiRow >= 0) {
+        const testBoard = board.map(r => [...r]);
+        testBoard[aiRow][aiCol] = HUMAN;
+        if (checkWin(testBoard, HUMAN)) blocked = true;
+    }
+
+    let playerBlocked = false;
+    let playerRow = -1;
+    for (let r = 0; r < ROWS; r++) {
+        if (board[r][playerCol] === HUMAN) { playerRow = r; break; }
+    }
+    if (playerRow >= 0) {
+        const testBoard = board.map(r => [...r]);
+        testBoard[playerRow][playerCol] = AI;
+        if (checkWin(testBoard, AI)) playerBlocked = true;
+    }
+
+    let createdThreat = aiThreats > 0;
+
+    const tookCenter = aiCol === 3;
+
+    return { blocked, playerBlocked, createdThreat, tookCenter, aiThreats, humanThreats, aiCol, playerCol, totalPieces };
 }
 //
 module.exports = {
@@ -320,8 +475,9 @@ module.exports = {
     COLS,
     isValidMove,
     createBoard,
-    getValidMoves
+    getValidMoves,
+    countThreats,
+    analyzeMoveContext
 };
-
 
 // contributors: @relentiousdragon

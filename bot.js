@@ -371,6 +371,7 @@ function setupConsole() {
 ║  translations     - Run translation check             ║
 ║  fix-translations - Remove unused translation keys    ║
 ║  status           - Show bot status                   ║
+║  stop / exit      - Stop and exit the bot             ║
 ║  help             - show this help message            ║
 ╚═══════════════════════════════════════════════════════╝
 `);
@@ -488,6 +489,15 @@ function setupConsole() {
                 }
                 break;
 
+            case 'stop':
+            case 'exit':
+            case 'quit':
+            case 'kill':
+                console.log('Shutting down bot...');
+                rl.close();
+                await shutdown('Console command');
+                break;
+
             case 'status':
                 const isRunning = botProcess && botProcess.exitCode === null && botProcess.signalCode === null;
                 console.log(`
@@ -508,8 +518,15 @@ Bot Status
         }
     });
 
+    rl.on('SIGINT', () => {
+        rl.close();
+        shutdown('SIGINT');
+    });
+
     rl.on('close', () => {
-        console.log('Console closed');
+        if (!shuttingDown) {
+            shutdown('Console closed');
+        }
     });
 }
 

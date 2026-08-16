@@ -123,6 +123,11 @@ async function handleButtonInteraction(bot, interaction, users, settings, logger
         await connect4.handleButton(bot, interaction, t, logger);
         return;
     }
+    if (interaction.customId.startsWith('bs_') || interaction.customId.startsWith('buckshot_')) {
+        const buckshot = require('../slashCommands/games/buckshot.js');
+        await buckshot.handleButton(bot, interaction, t, logger);
+        return;
+    }
     if (interaction.customId.startsWith('rps_playagain_')) {
         const rps = require('../slashCommands/games/rps.js');
         await rps.handlePlayAgain(bot, interaction, t, logger);

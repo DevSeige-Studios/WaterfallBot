@@ -118,12 +118,15 @@ async function exportAnalytics() {
         let peakInteractionsHour = { timestamp: null, messages: 0, interactions: 0 };
         let rpsWaterfallWins = 0, rpsHumanWins = 0;
         let connect4WaterfallWins = 0, connect4HumanWins = 0;
+        let buckshotWaterfallWins = 0, buckshotHumanWins = 0;
 
         data.forEach(entry => {
             rpsWaterfallWins += entry.rpsWaterfallWins || 0;
             rpsHumanWins += entry.rpsHumanWins || 0;
             connect4WaterfallWins += entry.connect4WaterfallWins || 0;
             connect4HumanWins += entry.connect4HumanWins || 0;
+            buckshotWaterfallWins += entry.buckshotWaterfallWins || 0;
+            buckshotHumanWins += entry.buckshotHumanWins || 0;
 
             if (!entry.timestamp || new Date(entry.timestamp).getFullYear() < 2000) return;
 
@@ -203,6 +206,8 @@ async function exportAnalytics() {
         const rpsWinRate = rpsTotal > 0 ? ((rpsWaterfallWins / rpsTotal) * 100).toFixed(1) : "0.0";
         const c4Total = connect4WaterfallWins + connect4HumanWins;
         const c4WinRate = c4Total > 0 ? ((connect4WaterfallWins / c4Total) * 100).toFixed(1) : "0.0";
+        const buckshotTotal = buckshotWaterfallWins + buckshotHumanWins;
+        const buckshotWinRate = buckshotTotal > 0 ? ((buckshotWaterfallWins / buckshotTotal) * 100).toFixed(1) : "0.0";
 
         const firstDate = dailyArray.length > 0 ? dailyArray[0].date : now.toISOString().split("T")[0];
         const lastDate = dailyArray.length > 0 ? dailyArray[dailyArray.length - 1].date : now.toISOString().split("T")[0];
@@ -310,7 +315,8 @@ async function exportAnalytics() {
             topCommands: allCommands,
             gameStats: {
                 rps: { waterfallWins: rpsWaterfallWins, humanWins: rpsHumanWins, totalGames: rpsWaterfallWins + rpsHumanWins },
-                connect4: { waterfallWins: connect4WaterfallWins, humanWins: connect4HumanWins, totalGames: connect4WaterfallWins + connect4HumanWins }
+                connect4: { waterfallWins: connect4WaterfallWins, humanWins: connect4HumanWins, totalGames: connect4WaterfallWins + connect4HumanWins },
+                buckshot: { waterfallWins: buckshotWaterfallWins, humanWins: buckshotHumanWins, totalGames: buckshotWaterfallWins + buckshotHumanWins }
             },
             dailyTotals: dailyArray,
             growthHistory: {
@@ -351,6 +357,7 @@ async function exportAnalytics() {
             "Game,Waterfall Wins,Human Wins,Total",
             `RPS,${rpsWaterfallWins},${rpsHumanWins},${rpsWaterfallWins + rpsHumanWins}`,
             `Connect4,${connect4WaterfallWins},${connect4HumanWins},${connect4WaterfallWins + connect4HumanWins}`,
+            `Buckshot,${buckshotWaterfallWins},${buckshotHumanWins},${buckshotWaterfallWins + buckshotHumanWins}`,
             "",
             "DAILY TOTALS",
             "Date,Messages,Interactions,Commands",
@@ -363,10 +370,13 @@ async function exportAnalytics() {
             categoryTotals,
             rpsWinRate,
             c4WinRate,
+            buckshotWinRate,
             rpsWaterfallWins,
             rpsHumanWins,
             connect4WaterfallWins,
             connect4HumanWins,
+            buckshotWaterfallWins,
+            buckshotHumanWins,
             guildGrowthData,
             userGrowthData
         });
@@ -694,6 +704,11 @@ function generateHTMLReport(report, dailyArray, topCommands, extras = {}) {
                         <div class="peak-label">Connect 4</div>
                         <div class="peak-value">${extras.connect4WaterfallWins + extras.connect4HumanWins}</div>
                         <div class="peak-detail">Bot: ${extras.connect4WaterfallWins} (${extras.c4WinRate}%) | Human: ${extras.connect4HumanWins}</div>
+                    </div>
+                    <div class="peak-item">
+                        <div class="peak-label">Buckshot Roulette</div>
+                        <div class="peak-value">${extras.buckshotWaterfallWins + extras.buckshotHumanWins}</div>
+                        <div class="peak-detail">Bot: ${extras.buckshotWaterfallWins} (${extras.buckshotWinRate}%) | Human: ${extras.buckshotHumanWins}</div>
                     </div>
                 </div>
             </div>

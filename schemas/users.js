@@ -31,6 +31,7 @@ const userSchema = mongoose.Schema({
         date: { type: String, default: null },
         count: { type: Number, default: 0 }
     },
+    lastBuckshotGuide: { type: Date, default: null },
     banned: { type: Boolean, default: false }
 }, { versionKey: false });
 
