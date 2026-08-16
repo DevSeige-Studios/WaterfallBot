@@ -446,7 +446,7 @@ function buildTurnButtons(gameId, state, t) {
         const uniqueItems = [...new Set(currentP.items)];
         for (const itemType of uniqueItems) {
             const count = currentP.items.filter(i => i === itemType).length;
-            const emoji = engine.ITEM_EMOJIS[itemType] || '';
+            const emoji = funcs.parseEmoji(engine.ITEM_EMOJIS[itemType] || '');
             const name = t(`commands:buckshot.items.${itemType}`);
             const itemBtn = new ButtonBuilder()
                 .setCustomId(`bs_item_${gameId}_${itemType}`)
