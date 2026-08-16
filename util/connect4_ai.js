@@ -83,12 +83,12 @@ function getGlobalStats() {
 const COLUMN_ORDER = [3, 2, 4, 1, 5, 0, 6];
 
 const POSITION_WEIGHTS = [
-    [3, 4,  5,  7,  5, 4, 3],
-    [4, 6,  8, 10,  8, 6, 4],
+    [3, 4, 5, 7, 5, 4, 3],
+    [4, 6, 8, 10, 8, 6, 4],
     [5, 8, 11, 13, 11, 8, 5],
     [5, 8, 11, 13, 11, 8, 5],
-    [4, 6,  8, 10,  8, 6, 4],
-    [3, 4,  5,  7,  5, 4, 3]
+    [4, 6, 8, 10, 8, 6, 4],
+    [3, 4, 5, 7, 5, 4, 3]
 ];
 
 function createBoard() {
@@ -404,6 +404,61 @@ async function getAIMoveAsync(board, difficulty = 'hard') {
         return getAIMove(board, difficulty);
     }
 }
+function countThreats(board, piece) {
+    let threats = 0;
+    const check = (w) => {
+        let p = 0, e = 0;
+        for (let i = 0; i < 4; i++) { if (w[i] === piece) p++; else if (w[i] === EMPTY) e++; }
+        if (p === 3 && e === 1) threats++;
+    };
+    for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS - 3; c++)
+            check([board[r][c], board[r][c + 1], board[r][c + 2], board[r][c + 3]]);
+    for (let c = 0; c < COLS; c++)
+        for (let r = 0; r < ROWS - 3; r++)
+            check([board[r][c], board[r + 1][c], board[r + 2][c], board[r + 3][c]]);
+    for (let r = 0; r < ROWS - 3; r++)
+        for (let c = 0; c < COLS - 3; c++)
+            check([board[r][c], board[r + 1][c + 1], board[r + 2][c + 2], board[r + 3][c + 3]]);
+    for (let r = 3; r < ROWS; r++)
+        for (let c = 0; c < COLS - 3; c++)
+            check([board[r][c], board[r - 1][c + 1], board[r - 2][c + 2], board[r - 3][c + 3]]);
+    return threats;
+}
+//
+function analyzeMoveContext(board, aiCol, playerCol) {
+    const totalPieces = board.flat().filter(c => c !== EMPTY).length;
+    const aiThreats = countThreats(board, AI);
+    const humanThreats = countThreats(board, HUMAN);
+
+    let blocked = false;
+    let aiRow = -1;
+    for (let r = 0; r < ROWS; r++) {
+        if (board[r][aiCol] === AI) { aiRow = r; break; }
+    }
+    if (aiRow >= 0) {
+        const testBoard = board.map(r => [...r]);
+        testBoard[aiRow][aiCol] = HUMAN;
+        if (checkWin(testBoard, HUMAN)) blocked = true;
+    }
+
+    let playerBlocked = false;
+    let playerRow = -1;
+    for (let r = 0; r < ROWS; r++) {
+        if (board[r][playerCol] === HUMAN) { playerRow = r; break; }
+    }
+    if (playerRow >= 0) {
+        const testBoard = board.map(r => [...r]);
+        testBoard[playerRow][playerCol] = AI;
+        if (checkWin(testBoard, AI)) playerBlocked = true;
+    }
+
+    let createdThreat = aiThreats > 0;
+
+    const tookCenter = aiCol === 3;
+
+    return { blocked, playerBlocked, createdThreat, tookCenter, aiThreats, humanThreats, aiCol, playerCol, totalPieces };
+}
 //
 module.exports = {
     getAIMove,
@@ -420,8 +475,9 @@ module.exports = {
     COLS,
     isValidMove,
     createBoard,
-    getValidMoves
+    getValidMoves,
+    countThreats,
+    analyzeMoveContext
 };
-
 
 // contributors: @relentiousdragon
