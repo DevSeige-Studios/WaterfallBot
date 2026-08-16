@@ -892,22 +892,16 @@ module.exports = {
                 .setCustomId(`c4_diff_${userId}_normal`)
                 .setLabel(t('commands:connect4.difficulty_normal'))
                 .setStyle(ButtonStyle.Success);
-            const emojiGreen = funcs.parseEmoji(e.lightning_green);
-            if (emojiGreen) normalBtn.setEmoji(emojiGreen);
 
             const hardBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_hard`)
                 .setLabel(t('commands:connect4.difficulty_hard'))
                 .setStyle(ButtonStyle.Primary);
-            const emojiYellow = funcs.parseEmoji(e.lightning_yellow);
-            if (emojiYellow) hardBtn.setEmoji(emojiYellow);
 
             const nightmareBtn = new ButtonBuilder()
                 .setCustomId(`c4_diff_${userId}_nightmare`)
                 .setLabel(t('commands:connect4.difficulty_nightmare'))
                 .setStyle(ButtonStyle.Danger);
-            const emojiRed = funcs.parseEmoji(e.lightning_red);
-            if (emojiRed) nightmareBtn.setEmoji(emojiRed);
 
             const diffContainer = new ContainerBuilder()
                 .setAccentColor(0x5865F2)
