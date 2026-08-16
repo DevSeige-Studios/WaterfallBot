@@ -609,7 +609,7 @@ function drawPiece(ctx, x, y, colorData, isWinning = false, shineRatio = -1) {
 }
 
 function drawFullBoard(ctx, board, colors, winningCoords = [], gameId = null) {
-    const isNightmare = Boolean(colors?.p2?.isNightmare || colors?.p1?.isNightmare || colors?.isNightmare);
+    const isNightmare = Boolean(colors.p2?.isNightmare || colors.p1?.isNightmare || colors.isNightmare);
     drawBoardBackground(ctx, board, isNightmare, gameId);
     if (gameId) drawSideSignature(ctx, gameId);
     for (let r = 0; r < ROWS; r++) {
@@ -872,7 +872,7 @@ async function renderAnimatedBoard(board, colors, lastMove, gameId = null) {
         }
 
         const isWinMove = checkWin(board, lastMove.player);
-        const isNightmare = Boolean(colors?.p2?.isNightmare || colors?.p1?.isNightmare || colors?.isNightmare);
+        const isNightmare = Boolean(colors.p2?.isNightmare || colors.p1?.isNightmare || colors.isNightmare);
         const totalPieces = board.flat().filter(c => c !== EMPTY).length;
         const isLate = totalPieces >= 24;
 
