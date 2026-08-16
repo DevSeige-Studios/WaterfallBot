@@ -534,66 +534,43 @@ module.exports = {
                 return;
             }
 
-            const gameId = `ai_${userId}_${Date.now()}`;
-            const board = connect4AI.createBoard();
-
-            await interaction.deferReply();
-
-            const colors = getPlayerColors(true);
-            const userStarts = Math.random() < 0.5;
-            const userSide = PLAYER_1;
-            let turn = userStarts ? PLAYER_1 : PLAYER_2;
-
-            let lastMove = null;
-            if (!userStarts) {
-                const col = await connect4AI.getAIMoveAsync(board);
-                const row = connect4AI.dropPiece(board, col, PLAYER_2);
-                lastMove = { col, row, player: PLAYER_2 };
-                turn = PLAYER_1;
+            const normalBtn = new ButtonBuilder()
+                .setCustomId(`c4_diff_${userId}_normal`)
+                .setLabel(t('commands:connect4.difficulty_normal'))
+                .setStyle(ButtonStyle.Success);
+            if (e.lightning_green && `${e.lightning_green}`.trim() !== '') {
+                normalBtn.setEmoji(e.lightning_green);
             }
 
-            const buffer = await renderBoardAsync(board, colors, lastMove, gameId);
-            logger.debug(`[/Connect4] Generated initial board buffer, size: ${buffer.length} bytes`);
-            const attachName = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.${lastMove ? 'gif' : 'png'}`;
-            const attachment = new AttachmentBuilder(buffer, { name: attachName });
+            const hardBtn = new ButtonBuilder()
+                .setCustomId(`c4_diff_${userId}_hard`)
+                .setLabel(t('commands:connect4.difficulty_hard'))
+                .setStyle(ButtonStyle.Primary);
+            if (e.lightning_yellow && `${e.lightning_yellow}`.trim() !== '') {
+                hardBtn.setEmoji(e.lightning_yellow);
+            }
 
-            activeGames.set(gameId, {
-                type: 'PVE',
-                challengerId: userId,
-                userSide: userSide,
-                board,
-                turn: turn,
-                lastInteraction: Date.now(),
-                accepted: true,
-                interaction: interaction,
-                lastInfo: { attachmentName: attachName },
-                colors: colors
-            });
-            userToGame.set(userId, gameId);
+            const nightmareBtn = new ButtonBuilder()
+                .setCustomId(`c4_diff_${userId}_nightmare`)
+                .setLabel(t('commands:connect4.difficulty_nightmare'))
+                .setStyle(ButtonStyle.Danger);
+            if (e.lightning_red && `${e.lightning_red}`.trim() !== '') {
+                nightmareBtn.setEmoji(e.lightning_red);
+            }
 
-            const game = activeGames.get(gameId);
-
-            const container = new ContainerBuilder()
+            const diffContainer = new ContainerBuilder()
                 .setAccentColor(0x5865F2)
-                .addSectionComponents(
-                    new SectionBuilder()
-                        .addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
-                            new TextDisplayBuilder().setContent(t('commands:connect4.game_vs_ai', {
-                                playerColor: game.colors.p1.emoji,
-                                aiColor: game.colors.p2.emoji
-                            }))
-                        )
-                        .setButtonAccessory(buildForfeitButton(gameId, t))
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`# ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                    new TextDisplayBuilder().setContent(t('commands:connect4.difficulty_select'))
                 )
                 .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
-                .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${attachName}`).setDescription(t('commands:connect4.title'))))
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(t('common:games.turn_yours')))
-                .addActionRowComponents(buildGameComponents(gameId, t, board));
+                .addActionRowComponents(
+                    new ActionRowBuilder().addComponents(normalBtn, hardBtn, nightmareBtn)
+                );
 
-            const reply = await interaction.editReply({
-                components: [container],
-                files: [attachment],
+            return interaction.reply({
+                components: [diffContainer],
                 flags: MessageFlags.IsComponentsV2
             });
 
@@ -611,6 +588,92 @@ module.exports = {
         const userId = interaction.user.id;
         const parts = customId.split('_');
         const action = parts[1];
+
+        if (action === 'diff') {
+            const targetUserId = parts[2];
+            const difficulty = parts[3];
+
+            if (userId !== targetUserId) {
+                return interaction.reply({
+                    content: `${e.deny} ${t('common:pagination.only_user')}`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const currentActiveGame = isUserInGame(userId);
+            if (currentActiveGame) {
+                return interaction.reply({
+                    content: `${e.pixel_cross} ${t('common:games.already_in_game')}`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            await interaction.deferUpdate();
+
+            const gameId = `ai_${userId}_${Date.now()}`;
+            const board = connect4AI.createBoard();
+            const colors = getPlayerColors(true);
+            const userStarts = Math.random() < 0.5;
+            const userSide = PLAYER_1;
+            let turn = userStarts ? PLAYER_1 : PLAYER_2;
+
+            let lastMove = null;
+            if (!userStarts) {
+                const col = await connect4AI.getAIMoveAsync(board, difficulty);
+                const row = connect4AI.dropPiece(board, col, PLAYER_2);
+                lastMove = { col, row, player: PLAYER_2 };
+                turn = PLAYER_1;
+            }
+
+            const buffer = await renderBoardAsync(board, colors, lastMove, gameId);
+            logger.debug(`[/Connect4] Generated initial board buffer, size: ${buffer.length} bytes`);
+            const attachName = `connect4_${Date.now()}_${Math.random().toString(36).slice(2)}.${lastMove ? 'gif' : 'png'}`;
+            const attachment = new AttachmentBuilder(buffer, { name: attachName });
+
+            activeGames.set(gameId, {
+                type: 'PVE',
+                difficulty,
+                challengerId: userId,
+                userSide,
+                board,
+                turn,
+                lastInteraction: Date.now(),
+                accepted: true,
+                interaction,
+                lastInfo: { attachmentName: attachName },
+                colors
+            });
+            userToGame.set(userId, gameId);
+
+            const game = activeGames.get(gameId);
+            const diffName = t(`commands:connect4.difficulty_${difficulty}`);
+
+            const container = new ContainerBuilder()
+                .setAccentColor(0x5865F2)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
+                            new TextDisplayBuilder().setContent(t('commands:connect4.game_vs_ai_diff', {
+                                difficulty: diffName,
+                                playerColor: game.colors.p1.emoji,
+                                aiColor: game.colors.p2.emoji
+                            }))
+                        )
+                        .setButtonAccessory(buildForfeitButton(gameId, t))
+                )
+                .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+                .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${attachName}`).setDescription(t('commands:connect4.title'))))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(t('common:games.turn_yours')))
+                .addActionRowComponents(buildGameComponents(gameId, t, board));
+
+            return interaction.editReply({
+                components: [container],
+                files: [attachment],
+                flags: MessageFlags.IsComponentsV2
+            });
+        }
+
         const gameId = parts.slice(2, parts.length - (action === 'move' ? 1 : 0)).join('_');
 
         const game = activeGames.get(gameId);
@@ -809,7 +872,7 @@ module.exports = {
                 });
 
                 await funcs.sleep(100);
-                const aiCol = await connect4AI.getAIMoveAsync(game.board);
+                const aiCol = await connect4AI.getAIMoveAsync(game.board, game.difficulty || 'hard');
                 const aiRow = connect4AI.dropPiece(game.board, aiCol, game.turn);
                 const aiMove = { col: aiCol, row: aiRow, player: game.turn };
 
@@ -850,17 +913,23 @@ module.exports = {
                 game.lastInfo.attachmentName = attachName3;
                 const finalAttach = new AttachmentBuilder(finalBuffer, { name: attachName3 });
 
+                const diffName = t(`commands:connect4.difficulty_${game.difficulty || 'hard'}`);
                 const userContainer = new ContainerBuilder()
                     .setAccentColor(0x5865F2)
                     .addSectionComponents(
                         new SectionBuilder()
                             .addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent(`## ${e.discord_orbs} ${t('commands:connect4.title')}`),
-                                new TextDisplayBuilder().setContent(t('common:games.turn_yours'))
+                                new TextDisplayBuilder().setContent(t('commands:connect4.game_vs_ai_diff', {
+                                    difficulty: diffName,
+                                    playerColor: game.colors.p1.emoji,
+                                    aiColor: game.colors.p2.emoji
+                                }))
                             ).setButtonAccessory(buildForfeitButton(gameId, t))
                     )
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                     .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${attachName3}`).setDescription(t('commands:connect4.title'))))
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(t('common:games.turn_yours')))
                     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                     .addActionRowComponents(buildGameComponents(gameId, t, game.board));
 
