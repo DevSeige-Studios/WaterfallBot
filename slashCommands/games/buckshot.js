@@ -506,7 +506,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('buckshot')
         .setNameLocalizations(commandMeta.buckshot?.name || {})
-        .setDescription('Play high-stakes Buckshot Roulette against Waterfall or friends (Up to 4 players)')
+        .setDescription('Play Buckshot Roulette against Waterfall or friends')
         .setDescriptionLocalizations(commandMeta.buckshot?.description || {})
         .addUserOption(opt =>
             opt.setName('opponent')
@@ -958,11 +958,11 @@ module.exports = {
 
     help: {
         name: 'buckshot',
-        description: 'Play high-stakes Buckshot Roulette against Waterfall or friends (Up to 4 players)',
+        description: 'Play Buckshot Roulette against Waterfall or friends',
         category: 'Games',
         permissions: [],
         botPermissions: [],
-        created: 1766066848
+        created: 1788895310
     }
 };
 //
