@@ -11,7 +11,7 @@ let lastSpawnAttempt = 0;
 const MIN_SPAWN_INTERVAL = 2000;
 
 const manager = new ShardingManager(path.join(__dirname, "index.js"), {
-    token: process.env.token,
+    token: process.env.TOKEN,
     totalShards: totalShards,
     shardList: [shardId],
 });

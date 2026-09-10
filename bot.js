@@ -85,7 +85,7 @@ function startBot() {
 }
 
 function checkEnv() {
-    const required = ["token", "SHARD_ID"];
+    const required = ["TOKEN", "SHARD_ID"];
     const optional = ["CLIENT_ID", "GITHUB_WEBHOOK_SECRET", "TOPGG_AUTH"];
     let missingRequired = false;
 
@@ -129,7 +129,7 @@ function checkVersion() {
 async function checkCreditsEmojis() {
     if (!fs.existsSync(settingsPath)) return;
 
-    const token = process.env.token;
+    const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
 
     if (!token || !clientId) {
@@ -234,7 +234,7 @@ async function checkCreditsEmojis() {
 async function checkAvatarEmojis() {
     if (!fs.existsSync(settingsPath)) return;
 
-    const token = process.env.token;
+    const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
 
     if (!token || !clientId) {

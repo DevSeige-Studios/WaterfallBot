@@ -62,7 +62,7 @@ async function deployCommands() {
     await readCommandFiles("./slashCommands");
     await readCommandFiles("./contextCommands");
 
-    const rest = new REST({ version: "10" }).setToken(process.env.token);
+    const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
     try {
         logger.info("Started refreshing application commands.");
@@ -74,12 +74,17 @@ async function deployCommands() {
 
         logger.neon("Successfully reloaded global application commands.");
 
-        await rest.put(
-            Routes.applicationGuildCommands(process.env.CLIENT_ID, "1484900113150382223"),
-            { body: guildCommands },
-        );
+        const devGuildId = process.env.DEV_GUILD_ID;
+        if (devGuildId) {
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, devGuildId),
+                { body: guildCommands },
+            );
 
-        logger.neon("Successfully registered explicit commands in guild 1484900113150382223.");
+            logger.neon(`Successfully registered dev commands in guild ${devGuildId}.`);
+        } else {
+            logger.info("DEV_GUILD_ID not set — skipping guild commands");
+        }
 
         if (process.env.CANARY !== "true") {
             const dblResponse = await axios.post(
@@ -94,7 +99,7 @@ async function deployCommands() {
             );
 
             logger.neon('Successfully posted commands to discordbotlist.com:');
-            logger.neon(dblResponse.data)
+            logger.neon(dblResponse.data);
         }
     } catch (error) {
         if (error.response) {
