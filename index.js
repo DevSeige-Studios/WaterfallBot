@@ -144,7 +144,7 @@ if (shardId == 0) {
                     container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
                     container.addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(`-# ${t('events:interaction.vote_thanks_footer')}`)
-                    )
+                    );
 
                     const dmResult = await funcs.sendDM(bot, user, { components: [container], flags: MessageFlags.IsComponentsV2 });
 
@@ -413,13 +413,13 @@ if (shardId === 0 && process.env.CANARY !== "true") {
 
 
 
-app.listen(process.env.port, () => {
+app.listen(process.env.PORT, () => {
     logger.info(shardId === 0 ?
-        `Webhook server running on port ${process.env.port}` :
+        `Webhook server running on port ${process.env.PORT}` :
         "Health Endpoint Started"
     );
     logger.alert(shardId === 0 ?
-        `Webhook server running on port ${process.env.port}` :
+        `Webhook server running on port ${process.env.PORT}` :
         "Health Endpoint Started"
     );
 });
@@ -614,7 +614,7 @@ bot.once(Events.ClientReady, async () => {
         if (shardId == 0) {
             dailyCronJob.start();
             analyticsExportJob.start();
-            logger.info("Analytics Export scheduled for the 1st of every month at midnight")
+            logger.info("Analytics Export scheduled for the 1st of every month at midnight");
         }
     }
 
@@ -940,7 +940,7 @@ function traverseForCommand(dir, filename) {
     return null;
 }
 
-bot.login(process.env.token).catch(e => {
+bot.login(process.env.TOKEN).catch(e => {
     logger.error(e);
     process.exit(1);
 });
