@@ -912,7 +912,7 @@
     },
     "buckshot": {
         "name": "buckshot",
-        "description": "Play high-stakes Buckshot Roulette against Waterfall or friends (Up to 4 players)",
+        "description": "Play Buckshot Roulette against Waterfall or friends",
         "option_opponent_name": "opponent",
         "option_opponent_description": "Challenge a player directly to a 1v1 duel (optional)",
         "option_mode_name": "mode",
