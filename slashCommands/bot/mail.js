@@ -67,7 +67,7 @@ module.exports = {
 
             const combinedMails = [
                 ...validPersonalMails.map(m => ({ ...m.toObject(), type: 'personal', _id: m._id })),
-                ...globalMailsToShow.map(m => ({ ...m.toObject(), type: 'global', _id: m._id }))
+                ...globalMailsToShow.map(m => ({ ...(typeof m.toObject === 'function' ? m.toObject() : m), type: 'global', _id: m._id }))
             ];
 
             if (combinedMails.length === 0) {
