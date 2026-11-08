@@ -1,6 +1,6 @@
 # Waterfall Commands
 
-*Last updated: Sun, 16 Aug 2026 10:08:07 GMT*
+*Last updated: Sun, 08 Nov 2026 07:45:37 GMT*
 
 ## Commands
 
@@ -219,7 +219,7 @@ Manually trigger hourly or daily worker tasks (DEV ONLY)
 
 ### `/buckshot`
 
-Play high-stakes Buckshot Roulette against Waterfall or friends (Up to 4 players)
+Play Buckshot Roulette against Waterfall or friends
 
 ---
 
