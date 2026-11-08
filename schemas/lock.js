@@ -5,6 +5,6 @@ const lockSchema = new mongoose.Schema({
     expiresAt: { type: Date, required: true },
 });
 
-module.exports = mongoose.model("Lock", lockSchema);
+module.exports = mongoose.models.Lock || mongoose.model("Lock", lockSchema);
 
 // contributors: @relentiousdragon
