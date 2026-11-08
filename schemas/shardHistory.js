@@ -8,4 +8,4 @@ const shardHistorySchema = mongoose.Schema({
 }, { versionKey: false });
 
 
-module.exports = mongoose.model("shardHistory", shardHistorySchema);
+module.exports = mongoose.models.shardHistory || mongoose.model("shardHistory", shardHistorySchema);
