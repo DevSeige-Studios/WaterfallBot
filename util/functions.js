@@ -256,19 +256,25 @@ module.exports = {
     async isImageUrl(url, timeout = 2000) {
         if (!url) return false;
         const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+        let urlObj;
         try {
-            const urlObj = new URL(url);
+            urlObj = new URL(url);
+            if (!['http:', 'https:'].includes(urlObj.protocol)) return false;
             const pathname = urlObj.pathname.toLowerCase();
             if (imageExtensions.some(ext => pathname.endsWith(ext))) return true;
         } catch { }
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), timeout);
-            const response = await fetch(url, { method: 'HEAD', signal: controller.signal, redirect: 'follow' });
-            clearTimeout(timeoutId);
-            let contentType = response.headers.get('content-type');
-            if (!contentType) return imageExtensions.some(ext => url.toLowerCase().includes(ext));
-            return contentType.startsWith('image/');
+            try {
+                const response = await fetch(url, { method: 'HEAD', signal: controller.signal, redirect: 'follow' });
+                const contentType = response.headers.get('content-type');
+                if (!response.ok) return false;
+                if (!contentType) return imageExtensions.some(ext => url.toLowerCase().includes(ext));
+                return contentType.startsWith('image/');
+            } finally {
+                clearTimeout(timeoutId);
+            }
         } catch {
             return imageExtensions.some(ext => url.toLowerCase().includes(ext));
         }
@@ -277,10 +283,27 @@ module.exports = {
     * @param {string} url - image url
     * @returns {{isValid: boolean, width: number, height: number, ratio: number}} Result
     */
-    async getImageInfo(url) {
+    async getImageInfo(url, timeout = 5000) {
         if (!url) return { isValid: false };
         try {
-            const img = await loadImage(url);
+            const parsedUrl = new URL(url);
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) return { isValid: false };
+
+            const response = await axios.get(parsedUrl.toString(), {
+                responseType: 'arraybuffer',
+                timeout,
+                maxRedirects: 3,
+                maxContentLength: 8 * 1024 * 1024,
+                maxBodyLength: 8 * 1024 * 1024,
+                validateStatus: status => status >= 200 && status < 300
+            });
+            const contentType = response.headers['content-type']?.split(';', 1)[0].trim().toLowerCase();
+            if (contentType && (!contentType.startsWith('image/') || contentType === 'image/svg+xml')) {
+                return { isValid: false };
+            }
+
+            const img = await loadImage(Buffer.from(response.data));
+            if (!img.width || !img.height) return { isValid: false };
             return {
                 isValid: true,
                 width: img.width,
