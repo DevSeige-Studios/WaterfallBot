@@ -53,7 +53,7 @@ serverSchema.index({ banned: 1 });
 serverSchema.index({ pendingDeletion: 1 });
 
 module.exports = {
-    Server: mongoose.model("servers", serverSchema)
+    Server: mongoose.models.servers || mongoose.model("servers", serverSchema)
 };
 
 

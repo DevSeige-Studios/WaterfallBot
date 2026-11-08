@@ -449,15 +449,12 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
                 new SectionBuilder()
                     .setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild.iconURL()))
                     .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(`# ${e.discord} ${t('commands:warn.dm_title', { server: interaction.guild.name })}`),
+                        new TextDisplayBuilder().setContent(`# ${e.pixel_warning} ${t('commands:warn.dm_title', { server: interaction.guild.name })}`),
                         new TextDisplayBuilder().setContent(t('commands:warn.dm_desc', { reason: reason }))
                     )
             )
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
-            )
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(t('commands:warn.dm_warn_count', { count: warnCount, threshold: 7 }))
             );
 
         if (nextAction) {
@@ -635,7 +632,7 @@ async function handleListWarns(bot, interaction, t) {
                             `**${t('commands:warn.warn_number', { number: warnIndex })}**\n` +
                             `-# ${e.member}: ${warn.moderator.tag} • <t:${Math.floor(warn.timestamp.getTime() / 1000)}:R>\n` +
                             `-# ${e.ID}: \`${warn.id}\`\n` +
-                            `-# ${e.reply} ${t('common:reason')}: ${warn.reason}\n`
+                            `-# ${e.reply} ${t('common:reason')}: ${String(warn.reason).replace(/\r?\n/g, '\n-# ')}\n`
                         )
                     )
             );

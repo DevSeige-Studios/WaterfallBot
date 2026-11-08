@@ -59,6 +59,7 @@ async function handleTurnTimeout(gameId, t) {
 
         const alive = engine.getAlivePlayers(state);
         if (alive.length <= 1) {
+            game.ended = true;
             removeGame(gameId);
             if (state.mode === 'pve') {
                 recordBuckshotResult(alive[0]?.isAI ? 'ai' : 'human');
@@ -319,7 +320,7 @@ function buildGameOverContainer(state, winner, t, forfeiterId = null) {
     let summary = `-# ${t('commands:buckshot.title')} • ${t('commands:buckshot.round', { round: state.roundNumber })}\n`;
     for (const p of state.players) {
         const nameDisplay = p.isAI ? 'Waterfall' : `<@${p.id}>`;
-        const prefix = p.alive ? '• ' : `${e.pixel_headstone} `;
+            const prefix = p.alive ? '• ' : `${(state.logs || []).some(log => log.type === 'forfeit' && log.userId === p.id) ? '🏳️' : e.pixel_headstone} `;
         const crown = (p.id === winner?.id) ? ' 👑' : '';
         const hpDisplay = p.alive ? formatHp(p.hp, p.maxHp) : formatHp(0, p.maxHp);
         summary += p.alive
@@ -841,6 +842,7 @@ module.exports = {
         }
 
         const state = game.state;
+        if (game.ended) return interaction.reply({ content: `${e.pixel_cross} ${t('common:games.game_expired')}`, flags: MessageFlags.Ephemeral });
         const currentP = engine.getCurrentPlayer(state);
 
         if (action === 'forfeit') {
@@ -863,6 +865,7 @@ module.exports = {
 
             const alive = engine.getAlivePlayers(state);
             if (alive.length <= 1) {
+                game.ended = true;
                 removeGame(gameId);
                 const winner = alive[0] || null;
                 if (state.mode === 'pve') {
@@ -921,6 +924,7 @@ module.exports = {
         if (action === 'shoot') {
             const targetId = parts[parts.length - 1];
             await interaction.deferUpdate();
+            if (activeGames.get(gameId) !== game || game.ended) return;
 
             const result = engine.executeShot(state, targetId);
             currentP.consecutiveSkips = 0;
@@ -932,6 +936,7 @@ module.exports = {
             }
 
             if (result.gameOver) {
+                game.ended = true;
                 removeGame(gameId);
                 if (state.mode === 'pve') {
                     recordBuckshotResult(result.winner?.isAI ? 'ai' : 'human');
@@ -1008,6 +1013,7 @@ async function handleDealerTurn(gameId, state, interaction, t) {
     let moves = 0;
 
     while (aiPlayer && aiPlayer.isAI && aiPlayer.alive && moves < 8) {
+        if (activeGames.get(gameId) !== game || game.ended) return;
         moves++;
         const decision = engine.getDealerAction(state);
         if (!decision) break;
@@ -1015,6 +1021,7 @@ async function handleDealerTurn(gameId, state, interaction, t) {
         if (decision.action === 'item') {
             const itemDelay = Math.floor(Math.random() * 800) + 1600;
             await funcs.sleep(itemDelay);
+            if (activeGames.get(gameId) !== game || game.ended) return;
 
             const res = engine.useItem(state, 'ai', decision.item, decision.targetId);
             if (!res.success) {
@@ -1031,9 +1038,11 @@ async function handleDealerTurn(gameId, state, interaction, t) {
         if (decision.action === 'shoot') {
             const shootDelay = calculateDealerDelay(state);
             await funcs.sleep(shootDelay);
+            if (activeGames.get(gameId) !== game || game.ended) return;
 
             const result = engine.executeShot(state, decision.targetId);
             if (result.gameOver) {
+                game.ended = true;
                 removeGame(gameId);
                 if (state.mode === 'pve') {
                     recordBuckshotResult(result.winner?.isAI ? 'ai' : 'human');
@@ -1058,9 +1067,11 @@ async function handleDealerTurn(gameId, state, interaction, t) {
         if (opponent) {
             const shootDelay = calculateDealerDelay(state);
             await funcs.sleep(shootDelay);
+            if (activeGames.get(gameId) !== game || game.ended) return;
 
             const result = engine.executeShot(state, opponent.id);
             if (result && result.gameOver) {
+                game.ended = true;
                 removeGame(gameId);
                 if (state.mode === 'pve') {
                     recordBuckshotResult(result.winner?.isAI ? 'ai' : 'human');

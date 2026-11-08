@@ -231,8 +231,14 @@ function minimax(board, depth, alpha, beta, maximizingPlayer, memo) {
     }
 
     const boardKey = `${getBoardKey(board)}_${depth}_${maximizingPlayer ? 1 : 0}`;
-    if (memo && memo.has(boardKey)) {
-        return memo.get(boardKey);
+    const alphaStart = alpha;
+    const betaStart = beta;
+    const cached = memo?.get(boardKey);
+    if (cached) {
+        if (cached.flag === 'exact') return [cached.column, cached.score];
+        if (cached.flag === 'lower') alpha = Math.max(alpha, cached.score);
+        if (cached.flag === 'upper') beta = Math.min(beta, cached.score);
+        if (alpha >= beta) return [cached.column, cached.score];
     }
 
     let bestColumn = validMoves[0];
@@ -250,9 +256,9 @@ function minimax(board, depth, alpha, beta, maximizingPlayer, memo) {
             alpha = Math.max(alpha, value);
             if (alpha >= beta) break;
         }
-        const result = [bestColumn, value];
-        if (memo) memo.set(boardKey, result);
-        return result;
+        const flag = value <= alphaStart ? 'upper' : value >= betaStart ? 'lower' : 'exact';
+        if (memo) memo.set(boardKey, { column: bestColumn, score: value, flag });
+        return [bestColumn, value];
     } else {
         let value = Infinity;
         for (const col of validMoves) {
@@ -266,9 +272,9 @@ function minimax(board, depth, alpha, beta, maximizingPlayer, memo) {
             beta = Math.min(beta, value);
             if (alpha >= beta) break;
         }
-        const result = [bestColumn, value];
-        if (memo) memo.set(boardKey, result);
-        return result;
+        const flag = value <= alphaStart ? 'upper' : value >= betaStart ? 'lower' : 'exact';
+        if (memo) memo.set(boardKey, { column: bestColumn, score: value, flag });
+        return [bestColumn, value];
     }
 }
 
@@ -310,28 +316,34 @@ function getAIMove(board, difficulty = 'hard') {
         return col !== null ? col : validMoves[0];
     }
 
-    const targetDepth = mode === 'nightmare' ? 7 : 6;
+    const targetDepth = mode === 'nightmare' ? 8 : 6;
     const memo = new Map();
     const scoredMoves = [];
 
     for (const col of validMoves) {
         const row = dropPiece(board, col, AI);
-        let createsInstantLoss = false;
-        if (row > 0) {
-            board[row - 1][col] = HUMAN;
-            if (checkWin(board, HUMAN)) createsInstantLoss = true;
-            board[row - 1][col] = EMPTY;
-        }
-
+        const humanWinsNext = countThreats(board, HUMAN);
+        const aiWinsNext = countThreats(board, AI);
         const score = minimax(board, targetDepth - 1, -Infinity, Infinity, false, memo)[1];
         undoPiece(board, col, row);
 
-        const adjustedScore = createsInstantLoss ? score - 50000 : score;
-        scoredMoves.push({ col, score: adjustedScore });
+        scoredMoves.push({ col, score: score + aiWinsNext * 2500 - humanWinsNext * 100000, humanWinsNext });
     }
 
-    scoredMoves.sort((a, b) => b.score - a.score);
-    return scoredMoves[0].col;
+    const safeMoves = scoredMoves.filter(move => move.humanWinsNext === 0);
+    const candidates = mode === 'nightmare' && safeMoves.length > 0 ? safeMoves : scoredMoves;
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].col;
+}
+
+function countThreats(board, piece) {
+    let threats = 0;
+    for (const col of getValidMoves(board)) {
+        const row = dropPiece(board, col, piece);
+        if (checkWin(board, piece)) threats++;
+        undoPiece(board, col, row);
+    }
+    return threats;
 }
 
 const darkenedColorCache = new Map();

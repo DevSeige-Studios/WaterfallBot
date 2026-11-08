@@ -195,7 +195,7 @@ serverStatsSchema.statics.trackInviteUse = async function (guildId, code, invite
 };
 //
 module.exports = {
-    ServerStats: mongoose.model("serverStats", serverStatsSchema)
+    ServerStats: mongoose.models.serverStats || mongoose.model("serverStats", serverStatsSchema)
 };
 
 

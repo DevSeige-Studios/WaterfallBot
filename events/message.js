@@ -83,13 +83,13 @@ async function trackBotDetection(message) {
                     }
                 }
 
-                const timeoutDuration = (settings.allowTimeout && settings.checks.messageBehavior) ?
-                    (settings.timeoutDuration || 60 * 1000) : 60 * 1000;
-
-                try {
-                    await member.timeout(timeoutDuration, `[Bot Detection] Cross-channel link spam detected (confidence: ${spamCheck.confidence}%)`);
-                } catch (e) {
-                    logger.debug(`[BotDetection] Failed to timeout ${message.author.id}: ${e.message}`);
+                if (settings.allowTimeout && settings.checks?.crossChannelSpam) {
+                    const timeoutDuration = settings.timeoutDuration || 60 * 1000;
+                    try {
+                        await member.timeout(timeoutDuration, `[Bot Detection] Cross-channel link spam detected (confidence: ${spamCheck.confidence}%)`);
+                    } catch (e) {
+                        logger.debug(`[BotDetection] Failed to timeout ${message.author.id}: ${e.message}`);
+                    }
                 }
 
                 if (settings.logAlerts) {

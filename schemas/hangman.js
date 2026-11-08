@@ -25,7 +25,7 @@ const hangmanSchema = new mongoose.Schema({
     }
 });
 //
-module.exports = mongoose.model('Hangman', hangmanSchema);
+module.exports = mongoose.models.Hangman || mongoose.model('Hangman', hangmanSchema);
 
 
 // contributors: @relentiousdragon

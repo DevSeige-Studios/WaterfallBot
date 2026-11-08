@@ -20,7 +20,7 @@ const shardStatsSchema = mongoose.Schema({
     updatedAt: { type: Date, default: Date.now, index: true }
 }, { versionKey: false });
 
-module.exports = mongoose.model("shardStats", shardStatsSchema);
+module.exports = mongoose.models.shardStats || mongoose.model("shardStats", shardStatsSchema);
 
 
 // contributors: @relentiousdragon

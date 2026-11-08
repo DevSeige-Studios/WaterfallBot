@@ -12,6 +12,6 @@ const infractionSchema = mongoose.Schema({
 
 infractionSchema.index({ timestamp: 1 }, { expireAfterSeconds: 45 * 24 * 60 * 60 });
 //
-module.exports = mongoose.model("infractions", infractionSchema);
+module.exports = mongoose.models.infractions || mongoose.model("infractions", infractionSchema);
 
 // contributors: @relentiousdragon

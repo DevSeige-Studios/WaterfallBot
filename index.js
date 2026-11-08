@@ -510,6 +510,7 @@ async function getTotalGuildCount() {
 }
 
 async function updateStatus() {
+    /* activity and presence updates
     const status = process.env.CANARY === 'true' ? 'idle' : 'online';
     await bot.user.setActivity("your server!", { type: ActivityType.Watching });
     await bot.user.setStatus(status);
@@ -531,6 +532,7 @@ async function updateStatus() {
 
         await bot.user.setActivity(statuses[currentStatus].name, { type: statuses[currentStatus].type });
     }, 15 * 60 * 1000);
+    */
 }
 
 async function postStats() {
@@ -607,7 +609,7 @@ bot.once(Events.ClientReady, async () => {
     logger.info(`Logged in as ${bot.user.tag}`);
     logger.info(`Shard ${shardId + 1}/${shardCount} online.`);
 
-    await updateStatus();
+    // await updateStatus();
 
     if (process.env.CANARY !== "true") {
         hourlyWorkerJob.start();
@@ -633,23 +635,8 @@ bot.once(Events.ClientReady, async () => {
     if (shardId === 0 && process.env.CANARY !== "true") {
         const { cleanupPendingDeletions } = require("./util/dataCleanup.js");
         cleanupPendingDeletions().catch(e => logger.error("Startup cleanup failed:", e));
-
-        // remove in next version
-        (async () => {
-            try {
-                const result = await ShardStats.updateMany(
-                    { $or: [{ guildHistory: { $exists: true } }, { userHistory: { $exists: true } }] },
-                    { $unset: { guildHistory: 1, userHistory: 1 } }
-                );
-                if (result.modifiedCount > 0) {
-                    logger.info(`removed old history data from ${result.modifiedCount} documents.`);
-                }
-            } catch (err) {
-                logger.error("Failed to clear old history data:", err);
-            }
-        })();
-    }  // 
-
+    }  
+//
     const inviteTracker = require("./util/inviteTracker.js");
     bot.guilds.cache.forEach(guild => inviteTracker.cacheInvites(guild));
 

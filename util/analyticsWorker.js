@@ -12,32 +12,42 @@ let interactionCount = 0;
 let commandUsage = {};
 let topCommandsCache = [];
 let lastCacheUpdate = 0;
+let flushInProgress = false;
 
 const FLUSH_INTERVAL = 60 * 1000;
 const CACHE_TTL = 10 * 60 * 1000;
 
 async function flushData(bot) {
-    if (messageCount === 0 && interactionCount === 0) {
-        if (settings.debug == "true") logger.debug("[Analytics] No data to flush");
+    if (flushInProgress) return;
+    if (messageCount === 0 && interactionCount === 0 && Object.keys(commandUsage).length === 0) {
+        if (settings?.debug == "true") logger.debug("[Analytics] No data to flush");
         return;
     }
+
+    flushInProgress = true;
+    const messageSnapshot = messageCount;
+    const interactionSnapshot = interactionCount;
+    const commandSnapshot = commandUsage;
+    messageCount = 0;
+    interactionCount = 0;
+    commandUsage = {};
 
     const now = new Date();
     const hourStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
 
-    if (settings.debug == "true") {
-        logger.debug(`[Analytics] Flushing data - Messages: ${messageCount}, Interactions: ${interactionCount}, Commands: ${Object.keys(commandUsage).length}`);
+    if (settings?.debug == "true") {
+        logger.debug(`[Analytics] Flushing data - Messages: ${messageSnapshot}, Interactions: ${interactionSnapshot}, Commands: ${Object.keys(commandSnapshot).length}`);
     }
 
     try {
         const update = {
             $inc: {
-                messages: messageCount,
-                interactions: interactionCount
+                messages: messageSnapshot,
+                interactions: interactionSnapshot
             }
         };
 
-        for (const [command, count] of Object.entries(commandUsage)) {
+        for (const [command, count] of Object.entries(commandSnapshot)) {
             update.$inc[`commandsUsage.${command}`] = count;
         }
 
@@ -47,16 +57,18 @@ async function flushData(bot) {
             { upsert: true, new: true }
         ).maxTimeMS(5000);
 
-        if (settings.debug == "true") {
+        if (settings?.debug == "true") {
             logger.debug(`[Analytics] Successfully flushed to DB for hour ${hourStart.toISOString()}`);
         }
-
-        messageCount = 0;
-        interactionCount = 0;
-        commandUsage = {};
-
     } catch (error) {
+        messageCount += messageSnapshot;
+        interactionCount += interactionSnapshot;
+        for (const [command, count] of Object.entries(commandSnapshot)) {
+            commandUsage[command] = (commandUsage[command] || 0) + count;
+        }
         logger.error("Failed to flush analytics data:", error);
+    } finally {
+        flushInProgress = false;
     }
 }
 
@@ -174,7 +186,7 @@ async function exportAnalytics() {
         const dayOfWeekData = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         dailyArray.forEach(d => {
-            const dayIndex = new Date(d.date).getDay();
+            const dayIndex = new Date(`${d.date}T00:00:00Z`).getUTCDay();
             dayOfWeekData[dayNames[dayIndex]] += d.interactions;
         });
 

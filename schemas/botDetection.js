@@ -78,9 +78,9 @@ activeUserStatusSchema.index({ serverID: 1, userID: 1 }, { unique: true });
 activeUserStatusSchema.index({ lastMessageAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 //
 module.exports = {
-    GlobalUserInfractions: mongoose.model("globalUserInfractions", globalUserInfractionsSchema),
-    BotDetectionSettings: mongoose.model("botDetectionSettings", botDetectionSettingsSchema),
-    NewUserTracking: mongoose.model("newUserTracking", newUserTrackingSchema),
-    ActiveUserStatus: mongoose.model("activeUserStatus", activeUserStatusSchema)
+    GlobalUserInfractions: mongoose.models.globalUserInfractions || mongoose.model("globalUserInfractions", globalUserInfractionsSchema),
+    BotDetectionSettings: mongoose.models.botDetectionSettings || mongoose.model("botDetectionSettings", botDetectionSettingsSchema),
+    NewUserTracking: mongoose.models.newUserTracking || mongoose.model("newUserTracking", newUserTrackingSchema),
+    ActiveUserStatus: mongoose.models.activeUserStatus || mongoose.model("activeUserStatus", activeUserStatusSchema)
 };
 // contributors: @relentiousdragon

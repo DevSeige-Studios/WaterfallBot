@@ -23,7 +23,7 @@ warnSchema.index({ serverID: 1, userID: 1 });
 
 
 
-module.exports = mongoose.model("warns", warnSchema);
+module.exports = mongoose.models.warns || mongoose.model("warns", warnSchema);
 
 
 // contributors: @relentiousdragon
