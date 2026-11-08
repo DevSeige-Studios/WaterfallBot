@@ -37,7 +37,7 @@ const userSchema = mongoose.Schema({
 
 userSchema.index({ banned: 1 });
 
-module.exports = mongoose.model("users", userSchema);
+module.exports = mongoose.models.users || mongoose.model("users", userSchema);
 
 
 // contributors: @relentiousdragon
