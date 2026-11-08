@@ -9,7 +9,7 @@ const globalMailSchema = mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { versionKey: false });
 
-module.exports = mongoose.model("global_mails", globalMailSchema);
+module.exports = mongoose.models.global_mails || mongoose.model("global_mails", globalMailSchema);
 
 
 // contributors: @relentiousdragon
