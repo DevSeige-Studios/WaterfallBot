@@ -5,12 +5,26 @@ const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const funcs = require("../../util/functions.js");
 
 async function getMeme() {
-    try {
-        const response = await axios.get('https://meme-api.com/gimme');
-        return response.data;
-    } catch (error) {
-        return null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const response = await axios.get('https://meme-api.com/gimme', {
+                timeout: 7000,
+                maxRedirects: 3,
+                maxContentLength: 256 * 1024
+            });
+            const meme = response.data;
+            const mediaUrl = new URL(meme?.url);
+
+            if (meme?.nsfw === false && meme?.spoiler !== true &&
+                typeof meme.title === 'string' && meme.title.trim() &&
+                ['http:', 'https:'].includes(mediaUrl.protocol)) {
+                return { ...meme, title: meme.title.trim().slice(0, 300), url: mediaUrl.toString() };
+            }
+        } catch (error) {
+            if (attempt === 2) return null;
+        }
     }
+    return null;
 }
 
 function buildMemeContainer(meme, t, interaction) {
@@ -73,7 +87,8 @@ module.exports = {
 
             await interaction.editReply({
                 components: [container, row],
-                flags: MessageFlags.IsComponentsV2
+                flags: MessageFlags.IsComponentsV2,
+                allowedMentions: { parse: [] }
             });
         } catch (error) {
             logger.error("[/MEME] Error executing command:", error);
@@ -111,13 +126,18 @@ module.exports = {
 
             await interaction.editReply({
                 components: [container, row],
-                flags: MessageFlags.IsComponentsV2
+                flags: MessageFlags.IsComponentsV2,
+                allowedMentions: { parse: [] }
             });
         } catch (error) {
             logger.error("[/MEME] Error handling button:", error);
-            return interaction.reply({
-                content: `${e.pixel_cross} ${t('common:error')}`,
-                flags: MessageFlags.Ephemeral
+            const errorContainer = new ContainerBuilder()
+                .setAccentColor(0xE74C3C)
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${e.pixel_cross} ${t('common:error')}`));
+            return interaction.editReply({
+                components: [errorContainer],
+                flags: MessageFlags.IsComponentsV2,
+                allowedMentions: { parse: [] }
             });
         }
     },
