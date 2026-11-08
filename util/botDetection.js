@@ -445,7 +445,7 @@ function analyzeMessageBehavior(tracking) {
 
     const joinedAt = new Date(tracking.joinedAt).getTime();
     const timeSinceJoin = Date.now() - joinedAt;
-    const messagesPerMinute = messageCount / (timeSinceJoin / 60000);
+    const messagesPerMinute = messageCount / (Math.max(timeSinceJoin, 1000) / 60000);
     if (messagesPerMinute > 5) {
         confidence += 15;
         reasons.push('rapid_messaging');
