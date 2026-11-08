@@ -41,17 +41,17 @@ function getTurnTaunt(ctx) {
     if (ctx.blocked) {
         if (late) {
             pool.push(
-                `YOU THOUGHT THAT WOULD WORK? ${col(ctx.aiCol)}. BLOCKED AHAHAHAHAHAHAAAA.`,
-                `${col(ctx.playerCol)} INTO ${col(ctx.aiCol)}. I SAW IT COMING THREE MOVES AGO!!1`,
-                `DENIED. YOU'RE OUT OF IDEAS AND OUT OF COLUMNS.`,
+                `YOU THOUGHT THAT WOULD WORK? ${col(ctx.aiCol)}. AHAHAHAHAHAHAHAHA`,
+                `${col(ctx.playerCol)} INTO ${col(ctx.aiCol)}. I SAW THE LINE BEFORE YOU DROPPED IT!!!`,
+                `DENIED. NOW YOUR NEXT WINNING SQUARE IS MINE TOO.`,
                 `what are you doiiiinnnnngg...`
             );
         } else {
             pool.push(
                 `${col(ctx.aiCol)}. Did you really think I'd let that through? ehh`,
-                `Blocked. You  ain't slick.`,
+                `Blocked. You ain't slick.`,
                 `Saw that coming from ${col(ctx.playerCol)}. Pathetic.`,
-                `That was your big plan? ${col(ctx.playerCol)}? I shut it down without even trying..`,
+                `That was your big plan? shut it down without even trying.`,
                 `You're so predictable it's boring.`
             );
         }
@@ -78,28 +78,30 @@ function getTurnTaunt(ctx) {
     if (ctx.createdThreat && ctx.aiThreats >= 2) {
         if (late) {
             pool.push(
-                `TWO OPEN LINES. PICK WHICH ONE KILLS YOU.`,
-                `YOU CAN'T BLOCK BOTH. THIS IS OVER!!!!`,
+                `TWO PLAYABLE WINNING MOVES. You can block one.`,
+                `YOU CAN'T BLOCK BOTH. THIS IS OVER!!!!.`,
                 `${ctx.aiThreats} THREATS. YOU GET TO STOP ONE. GOOD LUCK WITH THE REST.`
             );
         } else {
             pool.push(
-                `Two open lines. You can only block one. Choose wisely... or don't.`,
+                `Two playable winning squares. You can only cover one.`,
                 `${col(ctx.aiCol)} opens it up. You're stuck now.`,
+                `I made a fork. Whichever threat you block, the other one stays live.`,
                 `I'd feel bad, but you walked right into this one.`
             );
         }
     } else if (ctx.createdThreat) {
         if (late) {
             pool.push(
-                `THREE CONNECTED. ONE MORE AND YOU'RE DONE.`,
-                `${col(ctx.aiCol)}. THE LINE EXTENDS. DEAL WITH IT.`
+                `THREE CONNECTED. ONE MORE AND YOU'RE DONE`,
+                `I have a winning square ready. Find it before I do.`,
+                `${col(ctx.aiCol)} gave me a live threat. Your move has to answer it.`
             );
         } else {
             pool.push(
-                `Three in a row. Better do something about that, baldass.`,
-                `${col(ctx.aiCol)}. The line grows. Are you paying attention?`,
-                `That's three. You know what comes after three, right..?`
+                `I have a playable threat now. Better find the square.`,
+                `${col(ctx.aiCol)} opened a winning line. Are you paying attention?`,
+                `One winning square is live. You know what comes next, right..?`
             );
         }
     }
@@ -131,7 +133,8 @@ function getTurnTaunt(ctx) {
     if (ctx.humanThreats >= 2 && !ctx.blocked) {
         pool.push(
             `Cute. You've got lines building. Won't save you.`,
-            `I see your ${ctx.humanThreats} threats. That don't concern me.`
+            `You have ${ctx.humanThreats} playable winning squares. I have the better reply.`,
+            `I see those ${ctx.humanThreats} threats. Keep building, I'm counting the counters.`
         );
     }
     //
@@ -190,19 +193,18 @@ function getTurnTaunt(ctx) {
 
 function getStartTaunt() {
     return fmt(pick([
-        "First move is yours. The last one will be mine.",
-        "Go ahead. Drop your piece. I'll try not to end this too fast.",
-        "Every game starts the same way. You're confident. Then you're quiet ahaahaha.",
-        "**ENTERTAIN ME**.",
-        "The board is yours to lose. And you will.",
-        "Let's see if you last longer than the last one.",
-        "What baldass dare challenge me?"
+        "You get the first move. I'll take the last one if you leave me a line.",
+        "Go ahead. I'll check every column for the reply you missed.",
+        "Every move opens a square somewhere. Notice which one.",
+        "Show me a plan. I'll show you the counterplay.",
+        "The center is valuable. The edges are dangerous. Your choice.",
+        "I'll give you the first move. That's the only free one."
     ]), 'green');
 }
 
 function getWinTaunt(aiCol) {
     return fmt(pick([
-        `${col(aiCol)}. FOUR IN A ROW. KNEEL.`,
+       `${col(aiCol)}. FOUR IN A ROW. KNEEL.`,
         `GAME. ${col(aiCol)} FINISHED IT. YOU NEVER STOOD A CHANCE.`,
         `CONNECTED. IT'S OVER. YOU WERE OUT OF YOUR DEPTH FROM THE START.`,
         `THAT'S FOUR. ${col(aiCol)} SEALED YOUR FATE. KNOW YOUR PLACE.`,
