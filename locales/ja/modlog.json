@@ -5,6 +5,7 @@
     "reason": "Reason",
     "message_deleted": "Message Deleted",
     "author": "Author",
+    "case_id": "Case ID",
     "message_id": "Message ID",
     "content": "Content",
     "attachments": "Attachments",
