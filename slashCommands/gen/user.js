@@ -1,9 +1,11 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, MessageFlags, Routes, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, MessageFlags, Routes, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder, MediaGalleryItemBuilder, PermissionsBitField } = require('discord.js');
 const e = require("../../data/emoji.js");
 const { Server } = require("../../schemas/servers.js");
 const { ServerStats } = require("../../schemas/serverStats.js");
 const Warns = require("../../schemas/warns.js");
 const Infractions = require("../../schemas/infractions.js");
+const funcs = require("../../util/functions.js");
+const logger = require("../../logger.js");
 
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const FLAG_MASKS = {
@@ -173,7 +175,7 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
     const container = new ContainerBuilder()
         .setAccentColor(accentColor);
 
-    if (waterfallIds.includes(target.id) && displayBanner) {
+    if (displayBanner) {
         container.addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(
                 new MediaGalleryItemBuilder().setURL(displayBanner)
@@ -186,7 +188,12 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
     );
 
-    let description = `### ${t('commands:user.username_id')}\n${usernameDisplay} | ${target.id}\n\n### ${t('commands:user.created_date')}\n<t:${Math.floor(target.createdTimestamp / 1000)}:F>`;
+    let description = `-# **${t('commands:user.created_date') || 'Created at'}:** <t:${Math.floor(target.createdTimestamp / 1000)}:F>`;
+    if (interaction.guild && member?.joinedTimestamp) {
+        description += `\n-# **${t('commands:user.joined_date') || 'Joined at'}:** <t:${Math.floor(member.joinedTimestamp / 1000)}:F>`;
+    }
+
+    description += `\n\n### ${t('commands:user.username_id')}\n${usernameDisplay} | ${target.id}`;
 
     let clanTag;
     if (user.clan) {
@@ -201,8 +208,17 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         description += `\n\n### ${t('commands:user.badges')}\n${badgeArray.join(' ')}`;
     }
 
-    if (interaction.guild && member) {
-        description += `\n\n### ${t('commands:user.joined_date')}\n<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`;
+    if (interaction.guild && member?.voice?.channel) {
+        const vc = member.voice.channel;
+        const vcUrl = `https://discord.com/channels/${interaction.guild.id}/${vc.id}`;
+        let vcDetails = [];
+        if (member.voice.streaming) vcDetails.push('Streaming');
+        if (member.voice.selfVideo) vcDetails.push('Video');
+        if (member.voice.selfDeaf || member.voice.serverDeaf) vcDetails.push('Deafened');
+        else if (member.voice.selfMute || member.voice.serverMute) vcDetails.push('Muted');
+
+        const detailsStr = vcDetails.length ? ` • *${vcDetails.join(', ')}*` : '';
+        description += `\n\n### ${t('commands:user.voice_channel') || 'Voice Channel'}\n${e.voice_channnel} [#${vc.name}](${vcUrl}) (${vc.id})${detailsStr}`;
     }
 
     if (interaction.guild) {
@@ -229,29 +245,54 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
             //
         }
 
-        if (interaction.member.permissions.has('ModerateMembers')) {
+        const hasModPerms = interaction.memberPermissions?.has(PermissionsBitField.Flags.ModerateMembers)
+            || interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)
+            || interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)
+            || interaction.memberPermissions?.has(PermissionsBitField.Flags.BanMembers)
+            || interaction.memberPermissions?.has(PermissionsBitField.Flags.KickMembers)
+            || interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageMessages)
+            || interaction.member?.permissions?.has?.(PermissionsBitField.Flags.ModerateMembers)
+            || interaction.member?.permissions?.has?.(PermissionsBitField.Flags.Administrator)
+            || interaction.member?.permissions?.has?.(PermissionsBitField.Flags.ManageGuild)
+            || interaction.member?.permissions?.has?.(PermissionsBitField.Flags.BanMembers)
+            || interaction.member?.permissions?.has?.(PermissionsBitField.Flags.KickMembers)
+            || interaction.member?.permissions?.has?.(PermissionsBitField.Flags.ManageMessages)
+            || interaction.user.id === interaction.guild.ownerId
+            || settings.devs?.includes(interaction.user.id)
+            || settings.moderators?.includes(interaction.user.id);
+
+        if (hasModPerms) {
             try {
                 const warnData = await Warns.findOne({ serverID: interaction.guild.id, userID: target.id }).lean();
-                const infractions = await Infractions.find({ serverID: interaction.guild.id, userID: target.id }).lean();
                 const warns = warnData?.warns || [];
-                const risk = funcs.getRiskTier(infractions);
 
-                if (risk.count > 0 || warns.length > 0) {
-                    description += `\n\n### ${t('commands:user.infraction_assessment') || 'Infraction Assessment'}`;
-                    description += `\n${e.blurple_mod} **${t('commands:user.risk_tier') || 'Risk Tier'}:** ${risk.name}`;
-                    description += `\n-# ${t('commands:user.recent_infractions', { count: risk.count }) || `${risk.count} infractions in the last 45 days.`}`;
+                const isLargeServer = interaction.guild.memberCount > 1000;
 
-                    if (warns.length > 0) {
-                        description += `\n\n**${t('commands:user.active_warnings') || 'Active Warnings'}**`;
-                        const recentWarns = warns.slice(-3).reverse();
-                        for (const w of recentWarns) {
-                            const truncatedReason = funcs.truncate(w.reason, 60);
-                            description += `\n-# ${e.reply} ${truncatedReason} • <t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:R>`;
-                        }
+                if (isLargeServer) {
+                    const infractions = await Infractions.find({ serverID: interaction.guild.id, userID: target.id }).lean();
+                    const risk = funcs.getRiskTier(infractions || []);
+
+                    if (risk.count > 0 || warns.length > 0) {
+                        description += `\n\n### ${t('commands:user.infraction_assessment') || 'Infractions'}`;
+                        description += `\n${e.blurple_mod} **${t('commands:user.risk_tier') || 'Tier'}:** ${risk.name}`;
+                        description += `\n-# ${t('commands:user.recent_infractions', { count: risk.count }) || `${risk.count} infractions in the last 45 days.`}`;
+                    }
+                }
+
+                if (warns.length > 0) {
+                    description += `\n\n**${t('commands:user.active_warnings') || 'Active Warnings'}**`;
+                    const recentWarns = warns.slice(-3).reverse();
+                    for (const w of recentWarns) {
+                        const truncatedReason = funcs.truncate(w.reason, 60);
+                        description += `\n-# ${e.reply} ${truncatedReason} • <t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:R>`;
+                    }
+                    if (warns.length > 3) {
+                        const remaining = warns.length - 3;
+                        description += `\n-# ...and ${remaining} more`;
                     }
                 }
             } catch (err) {
-                //
+                logger.error("Error fetching user infractions in /user:", err);
             }
         }
     }
@@ -264,13 +305,6 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
     );
 
-    if (!waterfallIds.includes(target.id) && displayBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(displayBanner)
-            )
-        );
-    }
 
     const row = new ActionRowBuilder();
 

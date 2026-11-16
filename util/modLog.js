@@ -25,6 +25,57 @@ const WE = {
     role: "<:role:1446165389099798729>"
 };
 
+
+function formatUser(user, includeId = true) {
+    if (!user) return "Unknown";
+    if (typeof user === "string") {
+        if (/^\d+$/.test(user)) {
+            return `[${user}](https://discord.com/users/${user})${includeId ? ` (${user})` : ""}`;
+        }
+        return user;
+    }
+    const id = user.id || user.user?.id || user.userID;
+    const tag = user.tag || user.user?.tag || user.username || user.user?.username || user.displayName || (id ? String(id) : "Unknown");
+    if (id) {
+        return `[${tag}](https://discord.com/users/${id})${includeId ? ` (${id})` : ""}`;
+    }
+    return tag;
+}
+
+function formatMentionUser(user, includeId = true) {
+    if (!user) return "Unknown";
+    let id = null;
+    let tag = "Unknown";
+    if (typeof user === "string") {
+        if (/^\d+$/.test(user)) {
+            id = user;
+            tag = user;
+        } else {
+            return user;
+        }
+    } else {
+        id = user.id || user.user?.id || user.userID;
+        tag = user.tag || user.user?.tag || user.username || user.user?.username || user.displayName || (id ? String(id) : "Unknown");
+    }
+
+    if (id) {
+        return `<@${id}>${includeId ? ` (${id})` : ""}`;
+    }
+    return tag;
+}
+
+function formatChannel(channel, guildId = null) {
+    if (!channel) return "Unknown";
+    const id = channel.id || (typeof channel === "string" && /^\d+$/.test(channel) ? channel : null);
+    const name = channel.name || (id ? id : "channel");
+    const gId = guildId || channel.guildId || channel.guild?.id;
+    if (id) {
+        const url = gId ? `https://discord.com/channels/${gId}/${id}` : `https://discord.com/channels/@me/${id}`;
+        return `[#${name}](${url}) (${id})`;
+    }
+    return typeof channel === "string" ? channel : `#${name}`;
+}
+
 function getServerAvatarURL(bot, guild, size = 2048) {
     if (!guild) return bot.user.displayAvatarURL({ size });
     const botMember = guild.members.me;
@@ -728,7 +779,8 @@ async function sendBatchedLog(entry) {
                 channelGroups.set(channelId, {
                     name: channelName,
                     count: 0,
-                    users: new Set()
+                    users: new Set(),
+                    userObjects: new Map()
                 });
             }
             const channelGroup = channelGroups.get(channelId);
@@ -737,6 +789,7 @@ async function sendBatchedLog(entry) {
             if (data.message?.author) {
                 const userId = data.message.author.id;
                 channelGroup.users.add(userId);
+                channelGroup.userObjects.set(userId, data.message.author);
                 userCounts.set(userId, (userCounts.get(userId) || 0) + 1);
             }
 
@@ -758,10 +811,13 @@ async function sendBatchedLog(entry) {
         for (const [channelId, group] of channelGroups) {
             let line = t('modlog:messages_deleted_in_channel', {
                 count: group.count,
-                channel: `<#${channelId}>`
+                channel: formatChannel({ id: channelId, name: group.name }, guildId)
             });
 
-            if (group.users.size > 0) {
+            if (group.users.size === 1) {
+                const singleUser = group.userObjects.values().next().value;
+                line += ` from ${formatMentionUser(singleUser)}`;
+            } else if (group.users.size > 1) {
                 line += ' ' + t('modlog:from_users', { count: group.users.size });
             }
 
@@ -770,10 +826,22 @@ async function sendBatchedLog(entry) {
 
         embed.setDescription(descriptionLines.join('\n'));
 
+        if (userCounts.size === 1) {
+            const singleUserId = userCounts.keys().next().value;
+            const singleUser = batchData.find(d => d.message?.author?.id === singleUserId)?.message?.author;
+            if (singleUser) {
+                embed.addFields({
+                    name: t('modlog:author') || 'Author',
+                    value: formatMentionUser(singleUser),
+                    inline: true
+                });
+            }
+        }
+
         if (dominantModerator) {
             embed.addFields({
                 name: t('modlog:moderator'),
-                value: `${dominantModerator.tag} (${dominantModerator.id})`,
+                value: formatMentionUser(dominantModerator),
                 inline: true
             });
         }
@@ -805,7 +873,7 @@ async function sendBatchedLog(entry) {
                 }
             }
 
-            let line = `• #${channelName}`;
+            let line = `• ${formatChannel(data.newChannel, guildId)}`;
             if (changeStrings.length > 0) line += ' - ' + changeStrings.join(', ');
 
             if (currentLength + line.length > MAX_DESC_LENGTH) {
@@ -823,7 +891,7 @@ async function sendBatchedLog(entry) {
         if (mod) {
             embed.addFields({
                 name: t('modlog:moderator') || 'Moderator',
-                value: `${mod.tag} (${mod.id})`,
+                value: formatUser(mod),
                 inline: true
             });
         }
@@ -879,11 +947,11 @@ async function sendBatchedLog(entry) {
         for (let i = 0; i < batchData.length; i++) {
             const data = batchData[i];
             let line = '• Unknown';
-            if (data.user) line = `• ${data.user.tag}`;
-            else if (data.member?.user) line = `• ${data.member.user.tag}`;
+            if (data.user) line = `• ${formatUser(data.user, false)}`;
+            else if (data.member?.user) line = `• ${formatUser(data.member.user, false)}`;
             else if (data.role) line = `• ${data.role.name}`;
-            else if (data.channel) line = `• ${data.channel.name}`;
-            else if (data.message?.author) line = `• ${data.message.author.tag}`;
+            else if (data.channel) line = `• ${formatChannel(data.channel, guildId)}`;
+            else if (data.message?.author) line = `• ${formatMentionUser(data.message.author, false)}`;
 
             if (currentLength + line.length + 50 > MAX_DESC_LENGTH) {
                 summaryLines.push(`**+ ${batchData.length - itemsShown} others...**`);
@@ -900,7 +968,7 @@ async function sendBatchedLog(entry) {
         if (dominantModerator) {
             embed.addFields({
                 name: t('modlog:moderator'),
-                value: `${dominantModerator.tag} (${dominantModerator.id})`,
+                value: formatUser(dominantModerator),
                 inline: true
             });
         }
@@ -1028,15 +1096,15 @@ async function logAction(bot, guildId, data) {
             .setTimestamp();
 
         if (data.moderator) {
-            embed.addFields({ name: t('modlog:moderator'), value: `${data.moderator.tag} (${data.moderator.id})`, inline: true });
+            embed.addFields({ name: t('modlog:moderator'), value: formatUser(data.moderator), inline: true });
         }
 
         if (data.target) {
-            embed.addFields({ name: t('modlog:target'), value: `${data.target.tag || data.target} (${data.target.id || 'N/A'})`, inline: true });
+            embed.addFields({ name: t('modlog:target'), value: formatUser(data.target), inline: true });
         }
 
         if (data.channel) {
-            embed.addFields({ name: t('modlog:channel'), value: `<#${data.channel.id}>`, inline: true });
+            embed.addFields({ name: t('modlog:channel'), value: formatChannel(data.channel, guildId), inline: true });
         }
 
         if (data.details) {
@@ -1301,13 +1369,14 @@ async function buildMessageDeleteEmbed(data, bot, t) {
     if (message.author) {
         embed.setAuthor({
             name: message.author.tag,
+            url: `https://discord.com/users/${message.author.id}`,
             iconURL: message.author.displayAvatarURL()
         });
-        embed.addFields({ name: t('modlog:author'), value: `${message.author.tag} (${message.author.id})`, inline: true });
+        embed.addFields({ name: t('modlog:author'), value: formatMentionUser(message.author), inline: true });
     }
 
     if (message.channel) {
-        embed.addFields({ name: t('modlog:channel'), value: `<#${message.channel.id}>`, inline: true });
+        embed.addFields({ name: t('modlog:channel'), value: formatChannel(message.channel, message.guildId || message.guild?.id), inline: true });
     }
 
     embed.addFields({ name: t('modlog:message_id'), value: message.id, inline: true });
@@ -1315,7 +1384,7 @@ async function buildMessageDeleteEmbed(data, bot, t) {
     if (data.moderator) {
         embed.addFields({
             name: t('modlog:deleted_by') || 'Deleted By',
-            value: `${data.moderator.tag} (${data.moderator.id})`,
+            value: formatMentionUser(data.moderator),
             inline: true
         });
     }
@@ -1448,13 +1517,14 @@ async function buildMessageEditEmbed(data, bot, t) {
     if (newMessage.author) {
         embed.setAuthor({
             name: newMessage.author.tag,
+            url: `https://discord.com/users/${newMessage.author.id}`,
             iconURL: newMessage.author.displayAvatarURL()
         });
-        embed.addFields({ name: t('modlog:author'), value: `${newMessage.author.tag} (${newMessage.author.id})`, inline: true });
+        embed.addFields({ name: t('modlog:author'), value: formatMentionUser(newMessage.author), inline: true });
     }
 
     if (newMessage.channel) {
-        embed.addFields({ name: t('modlog:channel'), value: `<#${newMessage.channel.id}>`, inline: true });
+        embed.addFields({ name: t('modlog:channel'), value: formatChannel(newMessage.channel, newMessage.guildId || newMessage.guild?.id), inline: true });
     }
 
     embed.addFields({ name: t('modlog:jump_to_message'), value: `[Click Here](${newMessage.url})`, inline: true });
@@ -1707,7 +1777,7 @@ function buildMemberJoinEmbed(data, bot, t) {
         .setTimestamp();
 
     embed.addFields(
-        { name: t('modlog:user'), value: `${member.user.tag} (${member.user.id})`, inline: true },
+        { name: t('modlog:user'), value: formatUser(member.user), inline: true },
         { name: t('modlog:account_created'), value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
     );
 
@@ -1715,7 +1785,7 @@ function buildMemberJoinEmbed(data, bot, t) {
         if (inviteData.inviterId) {
             embed.addFields({
                 name: t('modlog:invited_by'),
-                value: `<@${inviteData.inviterId}> (${inviteData.uses} ${t('modlog:invites')})`,
+                value: `${formatUser({ id: inviteData.inviterId, tag: inviteData.inviterTag || inviteData.inviterId })} (${inviteData.uses} ${t('modlog:invites')})`,
                 inline: true
             });
         } else if (inviteData.inviterTag === 'Vanity URL') {
@@ -1742,9 +1812,10 @@ function buildWarnConfigUpdateEmbed(data, bot, t) {
     if (moderator) {
         embed.setAuthor({
             name: moderator.tag,
+            url: `https://discord.com/users/${moderator.id}`,
             iconURL: moderator.displayAvatarURL()
         });
-        embed.addFields({ name: t('modlog:moderator'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:moderator'), value: formatUser(moderator), inline: true });
     }
 
     embed.addFields({ name: t('modlog:threshold'), value: `${threshold} ${t('modlog:warn_count')}`, inline: true });
@@ -1776,7 +1847,7 @@ function buildMemberLeaveEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${targetUser.tag} (${targetUser.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(targetUser), inline: true });
 
     if (member?.joinedTimestamp) {
         embed.addFields({ name: t('modlog:joined'), value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true });
@@ -1786,7 +1857,7 @@ function buildMemberLeaveEmbed(data, bot, t) {
         if (inviteData.inviterId) {
             embed.addFields({
                 name: t('modlog:was_invited_by'),
-                value: `<@${inviteData.inviterId}>`,
+                value: formatUser({ id: inviteData.inviterId, tag: inviteData.inviterTag || inviteData.inviterId }),
                 inline: true
             });
         }
@@ -1815,14 +1886,14 @@ function buildMemberBanEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${user.tag} (${user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(user), inline: true });
 
     if (member?.joinedTimestamp) {
         embed.addFields({ name: t('modlog:joined'), value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true });
     }
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:banned_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:banned_by'), value: formatUser(moderator), inline: true });
     }
 
     if (reason) {
@@ -1842,10 +1913,10 @@ function buildMemberUnbanEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${user.tag} (${user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(user), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:unbanned_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:unbanned_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -1868,19 +1939,20 @@ async function buildBulkMessageDeleteEmbed(data, bot, t) {
 
     embed.addFields({
         name: t('modlog:channel'),
-        value: `<#${channel.id}>`,
+        value: formatChannel(channel, channel.guildId || channel.guild?.id),
         inline: true
     });
 
     if (moderator) {
         embed.addFields({
             name: t('modlog:moderator'),
-            value: `${moderator.tag} (${moderator.id})`,
+            value: formatMentionUser(moderator),
             inline: true
         });
     }
 
     const userCounts = new Map();
+    const userObjects = new Map();
     const oldestMessage = messages.reduce((oldest, msg) =>
         msg.createdTimestamp < oldest.createdTimestamp ? msg : oldest, messages.first()
     );
@@ -1892,13 +1964,22 @@ async function buildBulkMessageDeleteEmbed(data, bot, t) {
         if (msg.author) {
             const userId = msg.author.id;
             userCounts.set(userId, (userCounts.get(userId) || 0) + 1);
+            userObjects.set(userId, msg.author);
         }
     });
 
     const description = [];
-    description.push(`**${count} messages** were bulk deleted from ${channel}`);
+    description.push(`**${count} messages** were bulk deleted from ${formatChannel(channel, channel.guildId || channel.guild?.id)}`);
 
-    if (userCounts.size > 0) {
+    if (userCounts.size === 1) {
+        const singleUser = userObjects.values().next().value;
+        description.push(`**${t('modlog:author') || 'Author'}:** ${formatMentionUser(singleUser)}`);
+        embed.addFields({
+            name: t('modlog:author') || 'Author',
+            value: formatMentionUser(singleUser),
+            inline: true
+        });
+    } else if (userCounts.size > 1) {
         description.push(`**${t('modlog:affected_users') || 'Affected Users'}:** ${userCounts.size}`);
     }
 
@@ -1917,7 +1998,7 @@ async function buildBulkMessageDeleteEmbed(data, bot, t) {
 
         sampleMessages.forEach((msg, index) => {
             if (index < 3) {
-                const author = msg.author?.tag || 'Unknown';
+                const author = msg.author ? formatMentionUser(msg.author, false) : 'Unknown';
                 const content = msg.content ?
                     (msg.content.length > 50 ? msg.content.substring(0, 47) + '...' : msg.content) :
                     '[No text content]';
@@ -1951,10 +2032,10 @@ function buildMemberKickEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${user.tag} (${user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(user), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:kicked_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:kicked_by'), value: formatUser(moderator), inline: true });
     }
 
     if (member?.joinedTimestamp) {
@@ -1978,10 +2059,10 @@ function buildMemberTimeoutEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${member.user.tag} (${member.user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(member.user), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:timed_out_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:timed_out_by'), value: formatUser(moderator), inline: true });
     }
 
     if (until) {
@@ -2005,10 +2086,10 @@ function buildMemberTimeoutRemoveEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${member.user.tag} (${member.user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(member.user), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:removed_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:removed_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2024,12 +2105,12 @@ function buildChannelCreateEmbed(data, t) {
         .setTimestamp();
 
     const icon = getChannelIcon(channel.type);
-    embed.addFields({ name: t('modlog:channel'), value: `${icon} <#${channel.id}>`, inline: true });
+    embed.addFields({ name: t('modlog:channel'), value: `${icon} ${formatChannel(channel)}`, inline: true });
     embed.addFields({ name: t('modlog:channel_id'), value: channel.id, inline: true });
     embed.addFields({ name: t('modlog:channel_name'), value: channel.name, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:created_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:created_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2045,11 +2126,11 @@ function buildChannelUpdateEmbed(data, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:channel'), value: `<#${newChannel.id}>`, inline: true });
+    embed.addFields({ name: t('modlog:channel'), value: formatChannel(newChannel), inline: true });
     embed.addFields({ name: t('modlog:channel_id'), value: newChannel.id, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:modified_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:modified_by'), value: formatUser(moderator), inline: true });
     }
 
     /* if (oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser) {
@@ -2099,7 +2180,7 @@ function buildChannelDeleteEmbed(data, t) {
     embed.addFields({ name: t('modlog:channel_id'), value: channel.id, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:deleted_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:deleted_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2119,7 +2200,7 @@ function buildEmojiCreateEmbed(data, t) {
     embed.addFields({ name: t('modlog:id'), value: emoji.id, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:created_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:created_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2139,7 +2220,7 @@ function buildEmojiDeleteEmbed(data, t) {
     embed.addFields({ name: t('modlog:id'), value: emoji.id, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:deleted_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:deleted_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2158,7 +2239,7 @@ function buildEmojiUpdateEmbed(data, t) {
     embed.addFields({ name: t('modlog:emoji'), value: `${newEmoji} \`${newEmoji.name}\``, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:modified_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:modified_by'), value: formatUser(moderator), inline: true });
     }
 
     if (changes && changes.length > 0) {
@@ -2191,11 +2272,11 @@ function buildInviteCreateEmbed(data, t) {
 
     embed.addFields(
         { name: t('modlog:code'), value: `\`${invite.code}\``, inline: true },
-        { name: t('modlog:channel'), value: `<#${invite.channel.id}>`, inline: true }
+        { name: t('modlog:channel'), value: formatChannel(invite.channel, invite.guild?.id || invite.channel?.guildId), inline: true }
     );
 
     if (invite.inviter) {
-        embed.addFields({ name: t('modlog:created_by'), value: `<@${invite.inviter.id}> (${invite.inviter.tag})`, inline: true });
+        embed.addFields({ name: t('modlog:created_by'), value: formatUser(invite.inviter), inline: true });
     }
 
     if (invite.createdTimestamp) {
@@ -2238,12 +2319,12 @@ function buildInviteDeleteEmbed(data, t) {
 
     embed.addFields(
         { name: t('modlog:code'), value: `\`${invite.code}\``, inline: true },
-        { name: t('modlog:channel'), value: `<#${invite.channel?.id}>`, inline: true }
+        { name: t('modlog:channel'), value: formatChannel(invite.channel, invite.guild?.id || invite.channel?.guildId), inline: true }
     );
 
     if (invite.inviter) {
         embed.setThumbnail(invite.inviter.displayAvatarURL());
-        embed.addFields({ name: t('modlog:created_by'), value: `<@${invite.inviter.id}>`, inline: true });
+        embed.addFields({ name: t('modlog:created_by'), value: formatUser(invite.inviter), inline: true });
     }
 
     if (typeof invite.uses === 'number') {
@@ -2254,7 +2335,7 @@ function buildInviteDeleteEmbed(data, t) {
 }
 
 function buildMemberWarnEmbed(data, bot, t) {
-    const { member, reason, moderator, warnCount, actionTaken } = data;
+    const { member, reason, moderator, warnCount, actionTaken, warnId } = data;
 
     const embed = new EmbedBuilder()
         .setColor(0xFFC312)
@@ -2263,10 +2344,14 @@ function buildMemberWarnEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${member.user.tag} (${member.user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(member.user || member), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:warned_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:warned_by'), value: formatUser(moderator), inline: true });
+    }
+
+    if (warnId) {
+        embed.addFields({ name: t('modlog:case_id') || 'Case ID', value: `\`${warnId}\``, inline: true });
     }
 
     if (warnCount) {
@@ -2288,7 +2373,7 @@ function buildMemberWarnEmbed(data, bot, t) {
 }
 
 function buildMemberWarnRemoveEmbed(data, bot, t) {
-    const { member, reason, moderator, warnCount } = data;
+    const { member, reason, moderator, warnCount, warnId } = data;
 
     const embed = new EmbedBuilder()
         .setColor(0x28a745)
@@ -2297,10 +2382,14 @@ function buildMemberWarnRemoveEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${member.user.tag} (${member.user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(member.user || member), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:moderator'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:moderator'), value: formatUser(moderator), inline: true });
+    }
+
+    if (warnId) {
+        embed.addFields({ name: t('modlog:case_id') || 'Case ID', value: `\`${warnId}\``, inline: true });
     }
 
     embed.addFields({ name: t('modlog:removed_reason'), value: reason });
@@ -2319,10 +2408,10 @@ function buildMemberWarnClearEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:user'), value: `${member.user.tag} (${member.user.id})`, inline: true });
+    embed.addFields({ name: t('modlog:user'), value: formatUser(member.user || member), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:moderator'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:moderator'), value: formatUser(moderator), inline: true });
     }
 
     embed.addFields({ name: t('modlog:cleared_count'), value: `${clearedCount}`, inline: true });
@@ -2353,7 +2442,7 @@ function buildRoleCreateEmbed(data, t) {
 
     embed.addFields({ name: t('modlog:role'), value: `${role} (${role.name})`, inline: true });
     embed.addFields({ name: t('modlog:id'), value: role.id, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:created_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:created_by'), value: formatUser(moderator), inline: true });
 
     return embed;
 }
@@ -2369,7 +2458,7 @@ function buildRoleDeleteEmbed(data, t) {
 
     embed.addFields({ name: t('modlog:role_name'), value: role.name, inline: true });
     embed.addFields({ name: t('modlog:id'), value: role.id, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:deleted_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:deleted_by'), value: formatUser(moderator), inline: true });
 
     return embed;
 }
@@ -2384,7 +2473,7 @@ function buildRoleUpdateEmbed(data, t) {
         .setTimestamp();
 
     embed.addFields({ name: t('modlog:role'), value: `${newRole} (\`${newRole.id}\`)`, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:modified_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:modified_by'), value: formatUser(moderator), inline: true });
 
     if (changes && changes.length > 0) {
         const formatVal = (v) => {
@@ -2422,8 +2511,8 @@ function buildMemberRoleAddEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:member'), value: `${member.user.tag} (${member.id})`, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    embed.addFields({ name: t('modlog:member'), value: formatUser(member), inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
 
     const roleList = roles.map(r => r.toString()).join(', ');
     embed.addFields({ name: t('modlog:roles_added'), value: roleList });
@@ -2441,8 +2530,8 @@ function buildMemberRoleRemoveEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:member'), value: `${member.user.tag} (${member.id})`, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    embed.addFields({ name: t('modlog:member'), value: formatUser(member), inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
 
     const roleList = roles.map(r => r.toString()).join(', ');
     embed.addFields({ name: t('modlog:roles_removed'), value: roleList });
@@ -2460,8 +2549,8 @@ function buildMemberNicknameChangeEmbed(data, bot, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: t('modlog:member'), value: `${member.user.tag} (${member.id})`, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+    embed.addFields({ name: t('modlog:member'), value: formatUser(member), inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
 
     embed.addFields({ name: t('modlog:before'), value: oldNickname || t('modlog:none'), inline: false });
     embed.addFields({ name: t('modlog:after'), value: newNickname || t('modlog:none'), inline: false });
@@ -2483,7 +2572,7 @@ function buildStickerCreateEmbed(data, t) {
     embed.addFields({ name: t('modlog:id'), value: sticker.id, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:created_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:created_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2503,7 +2592,7 @@ function buildStickerDeleteEmbed(data, t) {
     embed.addFields({ name: t('modlog:id'), value: sticker.id, inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:deleted_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:deleted_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2520,7 +2609,7 @@ function buildStickerUpdateEmbed(data, t) {
         .setTimestamp();
 
     embed.addFields({ name: t('modlog:sticker') || 'Sticker', value: `${newSticker.name} (${newSticker.id})`, inline: true });
-    if (moderator) embed.addFields({ name: t('modlog:updated_by') || 'Updated By', value: `${moderator.tag}`, inline: true });
+    if (moderator) embed.addFields({ name: t('modlog:updated_by') || 'Updated By', value: formatUser(moderator), inline: true });
 
     const formatVal = (v) => {
         if (v === undefined || v === null || v === '') return t('modlog:none') || 'None';
@@ -2584,7 +2673,7 @@ function getPermissionChanges(oldChannel, newChannel, t) {
 
     newPerms.forEach((overwrite, id) => {
         const oldOverwrite = oldPerms.get(id);
-        const target = overwrite.type === 0 ? `<@&${id}>` : `<@${id}>`; // 0 = Role  1 = Member
+        const target = overwrite.type === 0 ? `<@&${id}>` : formatUser(id); // 0 = Role  1 = Member
 
         if (!oldOverwrite) {
             changes.push(t('modlog:perm_added', { target }));
@@ -2614,7 +2703,7 @@ function getPermissionChanges(oldChannel, newChannel, t) {
 
     oldPerms.forEach((overwrite, id) => {
         if (!newPerms.has(id)) {
-            const target = overwrite.type === 0 ? `<@&${id}>` : `<@${id}>`;
+            const target = overwrite.type === 0 ? `<@&${id}>` : formatUser(id);
             changes.push(t('modlog:perm_removed', { target }));
         }
     });
@@ -2636,11 +2725,11 @@ function buildThreadDeleteEmbed(data, t) {
     embed.addFields({ name: t('modlog:id'), value: thread.id, inline: true });
 
     if (thread.parent) {
-        embed.addFields({ name: t('modlog:parent_channel') || 'Parent Channel', value: `<#${thread.parent.id}>`, inline: true });
+        embed.addFields({ name: t('modlog:parent_channel') || 'Parent Channel', value: formatChannel(thread.parent), inline: true });
     }
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:deleted_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:deleted_by'), value: formatUser(moderator), inline: true });
     }
 
     return embed;
@@ -2656,10 +2745,10 @@ function buildThreadUpdateEmbed(data, t) {
         .setFooter({ text: "Waterfall", iconURL: moderator?.displayAvatarURL() })
         .setTimestamp();
 
-    embed.addFields({ name: isForum ? (t('modlog:post') || 'Post') : (t('modlog:thread') || 'Thread'), value: `<#${newThread.id}>`, inline: true });
+    embed.addFields({ name: isForum ? (t('modlog:post') || 'Post') : (t('modlog:thread') || 'Thread'), value: formatChannel(newThread), inline: true });
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     if (changes && changes.length > 0) {
@@ -2693,15 +2782,16 @@ function buildChannelHierarchyEmbed(data, bot, t) {
         .setTimestamp();
 
     if (data.mover) {
-        let moverDesc = `${t('modlog:item_moved', { item: `<#${data.mover.id}>` })}\n`;
+        const gId = data.mover.guildId || data.mover.guild?.id;
+        let moverDesc = `${t('modlog:item_moved', { item: formatChannel(data.mover, gId) })}\n`;
         moverDesc += `${t('modlog:position_change', { old: data.mover.oldPos, new: data.mover.newPos })}\n`;
 
         if (data.mover.neighborAbove && data.mover.neighborBelow) {
-            moverDesc += `📍 ${t('modlog:placed_between', { above: `<#${data.mover.neighborAbove.id}>`, below: `<#${data.mover.neighborBelow.id}>` })}`;
+            moverDesc += `📍 ${t('modlog:placed_between', { above: formatChannel(data.mover.neighborAbove, gId), below: formatChannel(data.mover.neighborBelow, gId) })}`;
         } else if (data.mover.neighborAbove) {
-            moverDesc += `⬇️ ${t('modlog:placed_below', { target: `<#${data.mover.neighborAbove.id}>` })}`;
+            moverDesc += `⬇️ ${t('modlog:placed_below', { target: formatChannel(data.mover.neighborAbove, gId) })}`;
         } else if (data.mover.neighborBelow) {
-            moverDesc += `⬆️ ${t('modlog:placed_above', { target: `<#${data.mover.neighborBelow.id}>` })}`;
+            moverDesc += `⬆️ ${t('modlog:placed_above', { target: formatChannel(data.mover.neighborBelow, gId) })}`;
         }
 
         embed.addFields({ name: t('modlog:primary_change'), value: moverDesc });
@@ -2719,7 +2809,7 @@ function buildChannelHierarchyEmbed(data, bot, t) {
     }
 
     if (data.moderator) {
-        embed.addFields({ name: t('modlog:modified_by'), value: `${data.moderator.tag} (${data.moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:modified_by'), value: formatUser(data.moderator), inline: true });
     }
 
     return embed;
@@ -2759,7 +2849,7 @@ function buildRoleHierarchyEmbed(data, bot, t) {
     }
 
     if (data.moderator) {
-        embed.addFields({ name: t('modlog:modified_by'), value: `${data.moderator.tag} (${data.moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:modified_by'), value: formatUser(data.moderator), inline: true });
     }
 
     return embed;
@@ -2773,11 +2863,12 @@ function buildBotDetectionAlertEmbed(data, bot, t) {
         .setTitle(`${WE.warn} ${t('modlog:bot_detection_alert') || 'Bot Detection Alert'}`)
         .setAuthor({
             name: member.user.tag,
+            url: `https://discord.com/users/${member.user.id}`,
             iconURL: member.user.displayAvatarURL()
         })
         .setThumbnail(member.user.displayAvatarURL())
         .addFields(
-            { name: t('modlog:user') || 'User', value: `${member.user.tag} (${member.user.id})`, inline: true },
+            { name: t('modlog:user') || 'User', value: formatUser(member.user), inline: true },
             { name: t('modlog:confidence') || 'Confidence', value: `${confidence}%`, inline: true }
         )
         .setFooter({ text: "Waterfall - Bot Detection", iconURL: bot.user.displayAvatarURL() })
@@ -2826,11 +2917,12 @@ function buildBotDetectionTimeoutEmbed(data, bot, t) {
         .setTitle(`${WE.ban} ${t('modlog:bot_detection_timeout') || 'Bot Detection Timeout'}`)
         .setAuthor({
             name: member.user.tag,
+            url: `https://discord.com/users/${member.user.id}`,
             iconURL: member.user.displayAvatarURL()
         })
         .setThumbnail(member.user.displayAvatarURL())
         .addFields(
-            { name: t('modlog:user') || 'User', value: `${member.user.tag} (${member.user.id})`, inline: true },
+            { name: t('modlog:user') || 'User', value: formatUser(member.user), inline: true },
             { name: t('modlog:confidence') || 'Confidence', value: `${confidence}%`, inline: true },
             { name: t('modlog:duration') || 'Duration', value: durationStr, inline: true }
         )
@@ -2856,11 +2948,12 @@ function buildBotDetectionKickEmbed(data, bot, t) {
         .setTitle(`${WE.ban} ${t('modlog:bot_detection_kick') || 'Bot Detection Kick'}`)
         .setAuthor({
             name: member.user.tag,
+            url: `https://discord.com/users/${member.user.id}`,
             iconURL: member.user.displayAvatarURL()
         })
         .setThumbnail(member.user.displayAvatarURL())
         .addFields(
-            { name: t('modlog:user') || 'User', value: `${member.user.tag} (${member.user.id})`, inline: true },
+            { name: t('modlog:user') || 'User', value: formatUser(member.user), inline: true },
             { name: t('modlog:confidence') || 'Confidence', value: `${confidence}%`, inline: true }
         )
         .setFooter({ text: "Waterfall - Bot Detection", iconURL: bot.user.displayAvatarURL() })
@@ -2885,11 +2978,12 @@ function buildAltDetectionAlertEmbed(data, bot, t) {
         .setTitle(`${WE.warn} ${t('modlog:alt_detection_alert') || 'Potential Alt Account Detected'}`)
         .setAuthor({
             name: member.user.tag,
+            url: `https://discord.com/users/${member.user.id}`,
             iconURL: member.user.displayAvatarURL()
         })
         .setThumbnail(member.user.displayAvatarURL())
         .addFields(
-            { name: t('modlog:user') || 'User', value: `${member.user.tag} (${member.user.id})`, inline: true }
+            { name: t('modlog:user') || 'User', value: formatUser(member.user), inline: true }
         )
         .setFooter({ text: "Waterfall - Alt Detection", iconURL: bot.user.displayAvatarURL() })
         .setTimestamp();
@@ -2899,7 +2993,7 @@ function buildAltDetectionAlertEmbed(data, bot, t) {
 
         for (const alt of potentialAlts) {
             const timeString = `<t:${Math.floor(new Date(alt.bannedAt).getTime() / 1000)}:R>`;
-            description += `- <@${alt.userID}> (banned ${timeString})\n`;
+            description += `- ${formatUser(alt.userID)} (banned ${timeString})\n`;
         }
 
         if (totalMatches > potentialAlts.length) {
@@ -2931,11 +3025,12 @@ function buildAltDetectionTimeoutEmbed(data, bot, t) {
         .setTitle(`${WE.ban} ${t('modlog:alt_detection_timeout') || 'Alt Account Timeout'}`)
         .setAuthor({
             name: member.user.tag,
+            url: `https://discord.com/users/${member.user.id}`,
             iconURL: member.user.displayAvatarURL()
         })
         .setThumbnail(member.user.displayAvatarURL())
         .addFields(
-            { name: t('modlog:user') || 'User', value: `${member.user.tag} (${member.user.id})`, inline: true },
+            { name: t('modlog:user') || 'User', value: formatUser(member.user), inline: true },
             { name: t('modlog:confidence') || 'Confidence', value: `${confidence}%`, inline: true },
             { name: t('modlog:duration') || 'Duration', value: durationStr, inline: true }
         )
@@ -2963,7 +3058,7 @@ function buildGuildIconUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     if (newIconURL) {
@@ -2983,7 +3078,7 @@ function buildGuildBannerUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     if (newBannerURL) {
@@ -3003,7 +3098,7 @@ function buildGuildNameUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     embed.addFields(
@@ -3024,7 +3119,7 @@ function buildGuildDescriptionUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     const oldDesc = funcs.truncate(oldDescription || t('modlog:none'), 1024);
@@ -3048,7 +3143,7 @@ function buildGuildVanityURLUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     embed.addFields(
@@ -3077,7 +3172,7 @@ function buildGuildVerificationLevelUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     embed.addFields(
@@ -3098,7 +3193,7 @@ function buildGuildLocaleUpdateEmbed(data, bot, t) {
         .setTimestamp();
 
     if (moderator) {
-        embed.addFields({ name: t('modlog:updated_by'), value: `${moderator.tag} (${moderator.id})`, inline: true });
+        embed.addFields({ name: t('modlog:updated_by'), value: formatUser(moderator), inline: true });
     }
 
     embed.addFields(

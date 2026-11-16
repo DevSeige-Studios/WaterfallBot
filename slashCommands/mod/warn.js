@@ -20,6 +20,32 @@ function formatDuration(ms) {
     if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''}`;
     return `${seconds} second${seconds > 1 ? 's' : ''}`;
 }
+
+const WARN_REASON_PRESETS = [
+    "Spamming / Message flooding",
+    "Excessive caps / Emoji spam",
+    "Inappropriate language / Profanity",
+    "Harassment / Toxicity / Bullying",
+    "Disrespectful behavior towards members/staff",
+    "Advertising / Unauthorized self-promotion",
+    "Posting NSFW / Inappropriate content",
+    "Posting malicious links / Phishing / Scams",
+    "Trolling / Ragebaiting / Provocation",
+    "Channel misuse / Off-topic discussion",
+    "Unsolicited DMs / DM advertising",
+    "Impersonation of members or staff",
+    "Mini-modding / Acting as staff",
+    "Bypassing automod / Chat filter evasion",
+    "Unmarked spoilers / Major spoilers",
+    "Ghost pinging / Mass mentioning",
+    "Sharing personal info / Doxxing threats",
+    "Disruptive behavior in Voice Channels",
+    "Creating server drama / Instigating arguments",
+    "Refusing to comply with staff instructions",
+    "Begging for roles, Nitro, or items",
+    "Inappropriate profile / Nickname / Avatar",
+    "Microphone spam / Soundboard abuse",
+];
 //
 module.exports = {
     data: new SlashCommandBuilder()
@@ -47,6 +73,7 @@ module.exports = {
                 .setDescriptionLocalizations(commandMeta.warn.option_reason_description || {})
                 .setRequired(true)
                 .setMaxLength(350)
+                .setAutocomplete(true)
             )
         )
         .addSubcommand(sub => sub
@@ -179,6 +206,23 @@ module.exports = {
     async autocomplete(interaction, bot, settings) {
         const focusedOption = interaction.options.getFocused(true);
 
+        if (focusedOption.name === 'reason') {
+            const query = (focusedOption.value || '').toLowerCase().trim();
+            const matches = WARN_REASON_PRESETS.filter(preset => preset.toLowerCase().includes(query));
+
+            const choices = [];
+            if (query && !WARN_REASON_PRESETS.some(p => p.toLowerCase() === query)) {
+                choices.push({
+                    name: `Custom: "${focusedOption.value.substring(0, 80)}"`,
+                    value: focusedOption.value.substring(0, 100)
+                });
+            }
+
+            choices.push(...matches.map(preset => ({ name: preset, value: preset })));
+
+            return await interaction.respond(choices.slice(0, 25));
+        }
+
         if (focusedOption.name === 'warn_id') {
             const userOption = interaction.options.get('user');
 
@@ -275,7 +319,10 @@ async function handleAddWarn(bot, interaction, t, logger) {
 }
 
 async function processWarning(bot, interaction, user, reason, t, logger) {
-    await interaction.reply({ content: `${e.loading} ${t("common:loading")}` });
+    await interaction.reply({
+        content: `${e.loading} ${t("common:loading")}`,
+        flags: MessageFlags.Ephemeral
+    });
 
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     const warnId = crypto.randomBytes(4).toString('hex');
@@ -449,12 +496,14 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
                 new SectionBuilder()
                     .setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild.iconURL()))
                     .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(`# ${e.pixel_warning} ${t('commands:warn.dm_title', { server: interaction.guild.name })}`),
-                        new TextDisplayBuilder().setContent(t('commands:warn.dm_desc', { reason: reason }))
+                        new TextDisplayBuilder().setContent(`# ${e.pixel_warning} ${t('commands:warn.dm_title', { server: interaction.guild.name })}\n-# Warn #${warnCount}`)
                     )
             )
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(t('commands:warn.dm_desc', { reason: reason }))
             );
 
         if (nextAction) {
@@ -497,7 +546,8 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
         reason: reason,
         moderator: interaction.user,
         warnCount: warnCount,
-        actionTaken: actionTaken
+        actionTaken: actionTaken,
+        warnId: warnId
     });
 
     const container = new ContainerBuilder()
@@ -578,8 +628,35 @@ async function processWarning(bot, interaction, user, reason, t, logger) {
 
     await interaction.editReply(response);
 
-    if (!dmSent) {
-        await interaction.followUp({ content: `<@${user.id}>` });
+    const channel = interaction.channel;
+    const botMember = interaction.guild?.members?.me || (interaction.guild ? await interaction.guild.members.fetch(bot.user.id).catch(() => null) : null);
+    const canSend = channel && channel.permissionsFor(botMember || bot.user)?.has(PermissionsBitField.Flags.SendMessages);
+
+    if (canSend) {
+        const publicContainer = new ContainerBuilder()
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`-# Warn #${warnCount}`),
+                new TextDisplayBuilder().setContent(t('commands:warn.success_desc', { user: user.tag, reason: reason }))
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`-# Waterfall • <t:${Math.floor(Date.now() / 1000)}:f>`)
+            );
+
+        const channelMessage = {
+            components: [publicContainer],
+            flags: MessageFlags.IsComponentsV2
+        };
+
+        if (!dmSent) {
+            channelMessage.content = `<@${user.id}>`;
+        }
+
+        await channel.send(channelMessage).catch(error => {
+            if (logger?.error) logger.error(`Failed to send warn message to channel:`, error);
+        });
     }
 }
 
@@ -741,7 +818,8 @@ async function handleRemoveWarn(bot, interaction, t, logger, warnID2, userID2) {
         member: { user: user, id: userID },
         reason: removedWarn.reason,
         moderator: interaction.user,
-        warnCount: warnData.warns.length
+        warnCount: warnData.warns.length,
+        warnId: warnId
     });
 
     const container = new ContainerBuilder()
