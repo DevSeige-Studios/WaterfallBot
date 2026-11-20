@@ -13,6 +13,7 @@ module.exports = {
             if (oldMember.communicationDisabledUntilTimestamp !== newMember.communicationDisabledUntilTimestamp) {
                 let moderator = null;
                 let reason = null;
+                let timedOutAt = new Date();
 
                 if (!auditLogPermissionsMissing) {
                     try {
@@ -30,6 +31,7 @@ module.exports = {
                         if (timeoutLog) {
                             moderator = timeoutLog.executor;
                             reason = timeoutLog.reason;
+                            timedOutAt = timeoutLog.createdAt;
                         }
                     } catch (err) {
                         if (err.code === 50013) auditLogPermissionsMissing = true;
@@ -40,6 +42,7 @@ module.exports = {
                     await modLog.logEvent(bot, guild.id, 'memberTimeout', {
                         member: newMember,
                         until: newMember.communicationDisabledUntil,
+                        timedOutAt,
                         moderator: moderator,
                         reason: reason,
                         auditLogPermissionsMissing: auditLogPermissionsMissing
