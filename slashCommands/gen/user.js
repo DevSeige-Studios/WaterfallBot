@@ -169,7 +169,14 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
     const section = new SectionBuilder()
         .setThumbnailAccessory(new ThumbnailBuilder().setURL(displayAvatar))
         .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`# ${title}`)
+            new TextDisplayBuilder().setContent([
+                `# ${title}`,
+                ...(badgeArray.length ? [`### ${t('commands:user.badges')}\n${badgeArray.join(' ')}`] : []),
+                `-# **${t('commands:user.created_date') || 'Created at'}:** <t:${Math.floor(target.createdTimestamp / 1000)}:F>`,
+                ...(interaction.guild && member?.joinedTimestamp
+                    ? [`-# **${t('commands:user.joined_date') || 'Joined at'}:** <t:${Math.floor(member.joinedTimestamp / 1000)}:F>`]
+                    : [])
+            ].join('\n'))
         );
 
     const container = new ContainerBuilder()
@@ -188,12 +195,7 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
     );
 
-    let description = `-# **${t('commands:user.created_date') || 'Created at'}:** <t:${Math.floor(target.createdTimestamp / 1000)}:F>`;
-    if (interaction.guild && member?.joinedTimestamp) {
-        description += `\n-# **${t('commands:user.joined_date') || 'Joined at'}:** <t:${Math.floor(member.joinedTimestamp / 1000)}:F>`;
-    }
-
-    description += `\n\n### ${t('commands:user.username_id')}\n${usernameDisplay} | ${target.id}`;
+    let description = `### ${t('commands:user.username_id')}\n${usernameDisplay} | ${target.id}`;
 
     let clanTag;
     if (user.clan) {
@@ -202,10 +204,6 @@ async function generateUserProfile(bot, interaction, target, t, settings) {
 
     if (clanTag) {
         description += `\n\n### ${t('commands:user.clan')}\n\`[${clanTag}]\``;
-    }
-
-    if (badgeArray.length) {
-        description += `\n\n### ${t('commands:user.badges')}\n${badgeArray.join(' ')}`;
     }
 
     if (interaction.guild && member?.voice?.channel) {
