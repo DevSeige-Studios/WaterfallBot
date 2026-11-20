@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, PermissionsBitField, ContainerBuilder, SectionBuilder, TextDisplayBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
 const e = require("../../data/emoji.js");
+const { i18n } = require("../../util/i18n.js");
 const commandMeta = require("../../util/i18n.js").getCommandMetadata();
 const modLog = require("../../util/modLog.js");
 const Warns = require("../../schemas/warns.js");
@@ -21,31 +22,7 @@ function formatDuration(ms) {
     return `${seconds} second${seconds > 1 ? 's' : ''}`;
 }
 
-const WARN_REASON_PRESETS = [
-    "Spamming / Message flooding",
-    "Excessive caps / Emoji spam",
-    "Inappropriate language / Profanity",
-    "Harassment / Toxicity / Bullying",
-    "Disrespectful behavior towards members/staff",
-    "Advertising / Unauthorized self-promotion",
-    "Posting NSFW / Inappropriate content",
-    "Posting malicious links / Phishing / Scams",
-    "Trolling / Ragebaiting / Provocation",
-    "Channel misuse / Off-topic discussion",
-    "Unsolicited DMs / DM advertising",
-    "Impersonation of members or staff",
-    "Mini-modding / Acting as staff",
-    "Bypassing automod / Chat filter evasion",
-    "Unmarked spoilers / Major spoilers",
-    "Ghost pinging / Mass mentioning",
-    "Sharing personal info / Doxxing threats",
-    "Disruptive behavior in Voice Channels",
-    "Creating server drama / Instigating arguments",
-    "Refusing to comply with staff instructions",
-    "Begging for roles, Nitro, or items",
-    "Inappropriate profile / Nickname / Avatar",
-    "Microphone spam / Soundboard abuse",
-];
+const WARN_REASON_PRESET_KEYS = Array.from({ length: 23 }, (_, index) => `reason_preset_${index + 1}`);
 //
 module.exports = {
     data: new SlashCommandBuilder()
@@ -207,13 +184,20 @@ module.exports = {
         const focusedOption = interaction.options.getFocused(true);
 
         if (focusedOption.name === 'reason') {
+            const serverData = interaction.guildId
+                ? await Server.findOne({ serverID: interaction.guildId }).select('language').lean().catch(() => null)
+                : null;
+            const language = serverData?.language || 'en';
+            await i18n.loadLanguages(language).catch(() => {});
+            const tS = i18n.getFixedT(language);
             const query = (focusedOption.value || '').toLowerCase().trim();
-            const matches = WARN_REASON_PRESETS.filter(preset => preset.toLowerCase().includes(query));
+            const presets = WARN_REASON_PRESET_KEYS.map(key => tS(`commands:warn.${key}`));
+            const matches = presets.filter(preset => preset.toLowerCase().includes(query));
 
             const choices = [];
-            if (query && !WARN_REASON_PRESETS.some(p => p.toLowerCase() === query)) {
+            if (query && !presets.some(p => p.toLowerCase() === query)) {
                 choices.push({
-                    name: `Custom: "${focusedOption.value.substring(0, 80)}"`,
+                    name: tS('commands:warn.reason_custom_label', { reason: focusedOption.value.substring(0, 80) }),
                     value: focusedOption.value.substring(0, 100)
                 });
             }

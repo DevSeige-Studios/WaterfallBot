@@ -30,16 +30,15 @@ function formatUser(user, includeId = true) {
     if (!user) return "Unknown";
     if (typeof user === "string") {
         if (/^\d+$/.test(user)) {
-            return `[${user}](https://discord.com/users/${user})${includeId ? ` (${user})` : ""}`;
+            return `<@${user}> (${user})`;
         }
         return user;
     }
     const id = user.id || user.user?.id || user.userID;
-    const tag = user.tag || user.user?.tag || user.username || user.user?.username || user.displayName || (id ? String(id) : "Unknown");
     if (id) {
-        return `[${tag}](https://discord.com/users/${id})${includeId ? ` (${id})` : ""}`;
+        return `<@${id}> (${id})`;
     }
-    return tag;
+    return user.tag || user.username || user.displayName || "Unknown";
 }
 
 function formatMentionUser(user, includeId = true) {
@@ -59,7 +58,7 @@ function formatMentionUser(user, includeId = true) {
     }
 
     if (id) {
-        return `<@${id}>${includeId ? ` (${id})` : ""}`;
+        return `<@${id}> (${id})`;
     }
     return tag;
 }
@@ -2066,7 +2065,12 @@ function buildMemberTimeoutEmbed(data, bot, t) {
     }
 
     if (until) {
-        embed.addFields({ name: t('modlog:until'), value: `<t:${Math.floor(until.getTime() / 1000)}:F>`, inline: true });
+        const durationMs = until.getTime() - (data.timedOutAt?.getTime?.() ?? Date.now());
+        embed.addFields({
+            name: t('modlog:until'),
+            value: `<t:${Math.floor(until.getTime() / 1000)}:F> (${funcs.formatDurationWords(durationMs)})`,
+            inline: true
+        });
     }
 
     if (reason) {
