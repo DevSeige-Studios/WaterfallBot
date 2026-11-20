@@ -456,6 +456,29 @@ module.exports = {
         return parts.join(' ') || '0s';
     },
     /**
+    * @param {string} milliseconds
+    * @returns {string} Result
+    */
+    formatDurationWords: function (ms) {
+        let remaining = Math.max(0, Math.floor(ms));
+        const units = [
+            ['day', 24 * 60 * 60 * 1000],
+            ['hour', 60 * 60 * 1000],
+            ['minute', 60 * 1000],
+            ['second', 1000],
+        ];
+        const parts = [];
+        for (const [name, size] of units) {
+            const amount = Math.floor(remaining / size);
+            if (amount > 0) {
+                parts.push(`${amount} ${name}${amount === 1 ? '' : 's'}`);
+                remaining %= size;
+                if (parts.length === 2) break;
+            }
+        }
+        return parts.join(' ') || '0 seconds';
+    },
+    /**
     * @param {string} url
     * @returns {{safe: boolean, reason: string}} Result
     */
